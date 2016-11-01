@@ -48,19 +48,21 @@ static void nullws_Terminate(struct _EGLDisplay *dpy)
 	free(dpy);
 }
 
-static EGLNativeWindowType nullws_CreateWindow(EGLNativeWindowType win, struct _EGLDisplay *display)
+static struct _EGLNativeWindowType *nullws_CreateWindow(EGLNativeWindowType win, struct _EGLDisplay *display)
 {
+    struct _EGLNativeWindowType* type = malloc(sizeof(struct _EGLNativeWindowType));
 	if (win == 0)
-	{
-		return android_createDisplaySurface();
-	}
+        type->win = android_createDisplaySurface();
 	else
-		return win;
+		type->win = win;
+    printf("NULL PLATFORM SSS %X\n", (int)(long)type);
+    return type;
 }
 
-static void nullws_DestroyWindow(EGLNativeWindowType win)
+static void nullws_DestroyWindow(struct _EGLNativeWindowType *win)
 {
 	// TODO: Cleanup?
+    free(win);
 }
 
 struct ws_module ws_module_info = {

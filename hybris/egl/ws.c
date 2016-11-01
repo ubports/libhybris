@@ -67,10 +67,10 @@ void ws_Terminate(struct _EGLDisplay *dpy)
 	ws->Terminate(dpy);
 }
 
-EGLNativeWindowType ws_CreateWindow(EGLNativeWindowType win, struct _EGLDisplay *display)
+EGLNativeWindowType ws_CreateWindow(EGLNativeWindowType win, struct _EGLDisplay *display, EGLConfig config)
 {
 	_init_ws();
-	return ws->CreateWindow(win, display);
+	return ws->CreateWindow(win, display, config);
 }
 
 void ws_DestroyWindow(EGLNativeWindowType win)
@@ -97,21 +97,21 @@ const char *ws_eglQueryString(EGLDisplay dpy, EGLint name, const char *(*real_eg
 	return ws->eglQueryString(dpy, name, real_eglQueryString);
 }
 
-void ws_prepareSwap(EGLDisplay dpy, EGLNativeWindowType win, EGLint *damage_rects, EGLint damage_n_rects)
+void ws_prepareSwap(EGLDisplay dpy, struct _EGLNativeWindowType* win, EGLint *damage_rects, EGLint damage_n_rects)
 {
 	_init_ws();
 	if (ws->prepareSwap)
 		ws->prepareSwap(dpy, win, damage_rects, damage_n_rects);
 }
 
-void ws_finishSwap(EGLDisplay dpy, EGLNativeWindowType win)
+void ws_finishSwap(EGLDisplay dpy, struct _EGLNativeWindowType* win)
 {
 	_init_ws();
 	if (ws->finishSwap)
 		ws->finishSwap(dpy, win);
 }
 
-void ws_setSwapInterval(EGLDisplay dpy, EGLNativeWindowType win, EGLint interval)
+void ws_setSwapInterval(EGLDisplay dpy, struct _EGLNativeWindowType* win, EGLint interval)
 {
 	_init_ws();
 	if (ws->setSwapInterval)

@@ -260,17 +260,17 @@ EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig config,
 
 	HYBRIS_TRACE_BEGIN("hybris-egl", "eglCreateWindowSurface", "");
 	struct _EGLDisplay *display = hybris_egl_display_get_mapping(dpy);
-	win = ws_CreateWindow(win, display);
+	struct _EGLNativeWindowType* window = ws_CreateWindow(win, display, config);
 
-	assert(((struct ANativeWindowBuffer *) win)->common.magic == ANDROID_NATIVE_WINDOW_MAGIC);
+	assert(((struct ANativeWindowBuffer *) window->win)->common.magic == ANDROID_NATIVE_WINDOW_MAGIC);
 
 	HYBRIS_TRACE_BEGIN("native-egl", "eglCreateWindowSurface", "");
-	EGLSurface result = (*_eglCreateWindowSurface)(dpy, config, win, attrib_list);
+	EGLSurface result = (*_eglCreateWindowSurface)(dpy, config, window->win, attrib_list);
 
 	HYBRIS_TRACE_END("native-egl", "eglCreateWindowSurface", "");
 
 	if (result != EGL_NO_SURFACE)
-		egl_helper_push_mapping(result, win);
+		egl_helper_push_mapping(result, window);
 
 	HYBRIS_TRACE_END("hybris-egl", "eglCreateWindowSurface", "");
 	return result;

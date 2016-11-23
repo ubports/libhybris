@@ -181,6 +181,7 @@ if HAS_ANDROID_5_0_0
 test_gps_CFLAGS += -DHAS_ANDROID_5_0_0
 endif
 test_gps_LDFLAGS = -pthread
+
 test_gps_LDADD =  \
 	$(top_builddir)/common/libhybris-common.la \
 	$(top_builddir)/hardware/libhardware.la
@@ -190,7 +191,7 @@ test_nfc_CFLAGS = \
 	-I$(top_srcdir)/include \
 	$(ANDROID_HEADERS_CFLAGS) \
 	-Wno-error=unused-function
-test_nfc_LDFLAGS = -pthread
+test_nfc_LDFLAGS = -lpthread
 test_nfc_LDADD = \
 	$(top_builddir)/common/libhybris-common.la \
 	$(top_builddir)/libnfc_nxp/libnfc_nxp.la \

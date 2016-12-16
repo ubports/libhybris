@@ -85,10 +85,10 @@ __eglMustCastToProperFunctionPointerType ws_eglGetProcAddress(const char *procna
 	return ws->eglGetProcAddress(procname);
 }
 
-void ws_passthroughImageKHR(EGLContext *ctx, EGLenum *target, EGLClientBuffer *buffer, const EGLint **attrib_list)
+void ws_passthroughImageKHR(EGLDisplay* dpy, EGLContext *ctx, EGLenum *target, EGLClientBuffer *buffer, const EGLint **attrib_list)
 {
 	_init_ws();
-	return ws->passthroughImageKHR(ctx, target, buffer, attrib_list);
+	return ws->passthroughImageKHR(dpy, ctx, target, buffer, attrib_list);
 }
 
 const char *ws_eglQueryString(EGLDisplay dpy, EGLint name, const char *(*real_eglQueryString)(EGLDisplay dpy, EGLint name))

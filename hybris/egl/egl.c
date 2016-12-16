@@ -500,7 +500,8 @@ static EGLImageKHR _my_eglCreateImageKHR(EGLDisplay dpy, EGLContext ctx, EGLenum
 	EGLClientBuffer newbuffer = buffer;
 	const EGLint *newattrib_list = attrib_list;
 
-	ws_passthroughImageKHR(&newctx, &newtarget, &newbuffer, &newattrib_list);
+	struct _EGLDisplay *display = hybris_egl_display_get_mapping(dpy);
+	ws_passthroughImageKHR(display, &newctx, &newtarget, &newbuffer, &newattrib_list);
 
 	EGLImageKHR eik = (*_eglCreateImageKHR)(dpy, newctx, newtarget, newbuffer, newattrib_list);
 

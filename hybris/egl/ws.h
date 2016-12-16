@@ -28,6 +28,10 @@ struct _EGLNativeWindowType {
 	EGLNativeWindowType win;
 };
 
+struct _EGLClientBuffer {
+    EGLClientBuffer buf;
+};
+
 struct ws_module {
 	void (*init_module)(struct ws_egl_interface *egl_interface);
 
@@ -36,7 +40,7 @@ struct ws_module {
 	struct _EGLNativeWindowType *(*CreateWindow)(EGLNativeWindowType win, struct _EGLDisplay *display, EGLConfig config);
 	void (*DestroyWindow)(struct _EGLNativeWindowType* win);
 	__eglMustCastToProperFunctionPointerType (*eglGetProcAddress)(const char *procname);
-	void (*passthroughImageKHR)(EGLContext *ctx, EGLenum *target, EGLClientBuffer *buffer, const EGLint **attrib_list);
+	void (*passthroughImageKHR)(struct _EGLDisplay* dpy, EGLContext *ctx, EGLenum *target, EGLClientBuffer *buffer, const EGLint **attrib_list);
 	const char *(*eglQueryString)(EGLDisplay dpy, EGLint name, const char *(*real_eglQueryString)(EGLDisplay dpy, EGLint name));
 	void (*prepareSwap)(EGLDisplay dpy, struct _EGLNativeWindowType* win, EGLint *damage_rects, EGLint damage_n_rects);
 	void (*finishSwap)(EGLDisplay dpy, struct _EGLNativeWindowType* win);
@@ -48,7 +52,7 @@ void ws_Terminate(struct _EGLDisplay *dpy);
 EGLNativeWindowType ws_CreateWindow(EGLNativeWindowType win, struct _EGLDisplay *display, EGLConfig);
 void ws_DestroyWindow(EGLNativeWindowType win);
 __eglMustCastToProperFunctionPointerType ws_eglGetProcAddress(const char *procname);
-void ws_passthroughImageKHR(EGLContext *ctx, EGLenum *target, EGLClientBuffer *buffer, const EGLint **attrib_list);
+void ws_passthroughImageKHR(EGLDisplay* dpy, EGLContext *ctx, EGLenum *target, EGLClientBuffer *buffer, const EGLint **attrib_list);
 const char *ws_eglQueryString(EGLDisplay dpy, EGLint name, const char *(*real_eglQueryString)(EGLDisplay dpy, EGLint name));
 void ws_prepareSwap(EGLDisplay dpy, struct _EGLNativeWindowType* win, EGLint *damage_rects, EGLint damage_n_rects);
 void ws_finishSwap(EGLDisplay dpy, struct _EGLNativeWindowType* win);

@@ -82,9 +82,9 @@ extern "C" __eglMustCastToProperFunctionPointerType hwcomposerws_eglGetProcAddre
 	return eglplatformcommon_eglGetProcAddress(procname);
 }
 
-extern "C" void hwcomposerws_passthroughImageKHR(EGLContext *ctx, EGLenum *target, EGLClientBuffer *buffer, const EGLint **attrib_list)
+extern "C" void hwcomposerws_passthroughImageKHR(_EGLDisplay* dpy, EGLContext *ctx, EGLenum *target, EGLClientBuffer *buffer, const EGLint **attrib_list)
 {
-	eglplatformcommon_passthroughImageKHR(ctx, target, buffer, attrib_list);
+	eglplatformcommon_passthroughImageKHR(dpy, ctx, target, buffer, attrib_list);
 }
 
 struct ws_module ws_module_info = {

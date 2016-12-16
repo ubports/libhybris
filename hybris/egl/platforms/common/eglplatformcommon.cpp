@@ -265,7 +265,7 @@ extern "C" EGLBoolean eglplatformcommon_eglHybrisReleaseNativeBuffer(EGLClientBu
 
 
 extern "C" void
-eglplatformcommon_passthroughImageKHR(EGLContext *ctx, EGLenum *target, EGLClientBuffer *buffer, const EGLint **attrib_list)
+eglplatformcommon_passthroughImageKHR(struct _EGLDisplay*, EGLContext *ctx, EGLenum *target, EGLClientBuffer *buffer, const EGLint **attrib_list)
 {
 #ifdef WANT_WAYLAND
 	static int debugenvchecked = 0;

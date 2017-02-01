@@ -21,13 +21,19 @@ extern "C" {
 static gralloc_module_t *gralloc = 0;
 static alloc_device_t *alloc = 0;
 
-struct MirDisplay : _EGLDisplay
+struct MirBaseDisplay : _EGLDisplay
+{
+    bool legacy;
+};
+
+struct MirDisplay : MirBaseDisplay
 {
     MirDisplay(MirConnection* con, MirExtensionAndroidEGLV1 const* ext) :
         connection(con),
         ext(ext)
     {
         dpy = to_native_display_type(connection);
+        legacy = false;
     }
 
     EGLNativeDisplayType to_native_display_type(MirConnection* connection)
@@ -64,14 +70,25 @@ private:
     MirExtensionAndroidEGLV1 const* ext;
 };
 
-struct ErrorDisplay : _EGLDisplay
+struct ErrorDisplay : MirBaseDisplay
 {
     ErrorDisplay()
     {
         dpy = EGL_NO_DISPLAY;
+        legacy = false;
     }
 };
 ErrorDisplay const error_display;
+
+static int const legacy_dpy = 12345;
+struct LegacyDisplay : MirBaseDisplay
+{
+    LegacyDisplay()
+    {
+        dpy = (EGLDisplay) &legacy_dpy;
+        legacy = true;
+    }
+};
 
 extern "C" void mir_init_module(struct ws_egl_interface *egl_iface)
 {
@@ -84,6 +101,12 @@ extern "C" void mir_init_module(struct ws_egl_interface *egl_iface)
 
 extern "C" _EGLDisplay *mir_GetDisplay(EGLNativeDisplayType display)
 {
+    if (display == EGL_DEFAULT_DISPLAY)
+    {
+        printf("RETURNING DEFAULT\n");
+        return new LegacyDisplay;
+    }
+
     MirConnection* connection = static_cast<MirConnection*>(display);
     MirExtensionAndroidEGLV1 const* ext =  mir_extension_android_egl_v1(connection);
 
@@ -106,11 +129,23 @@ struct MirNativeWindowType : _EGLNativeWindowType
     MirRenderSurface * rs;
     int width;
     int height;
+    bool legacy;
 };
 
-extern "C" struct _EGLNativeWindowType *mir_CreateWindow(EGLNativeWindowType win, _EGLDisplay *disp, EGLConfig config)
+extern "C" struct _EGLNativeWindowType *mir_CreateWindow(EGLNativeWindowType win, _EGLDisplay *dis, EGLConfig config)
 {
-    MirDisplay* display = (MirDisplay*) disp;
+    MirBaseDisplay* d = (MirBaseDisplay*) dis;
+    
+    if (d->legacy)
+    {
+        printf("LEGACY MAKE A WIN\n");
+        MirNativeWindowType* w = new MirNativeWindowType;
+        w->win = win;
+        w->legacy = true;
+        return w;
+    }
+
+    MirDisplay* display = (MirDisplay*) d;
 
     MirNativeWindowType* t = new MirNativeWindowType;
     t->display = display;
@@ -118,16 +153,18 @@ extern "C" struct _EGLNativeWindowType *mir_CreateWindow(EGLNativeWindowType win
     mir_render_surface_get_size(t->rs, &t->width, &t->height);
 
     EGLint format = 0;
-    eglGetConfigAttrib(disp->dpy, config, EGL_NATIVE_VISUAL_ID, &format);
+    eglGetConfigAttrib(display->dpy, config, EGL_NATIVE_VISUAL_ID, &format);
     unsigned int usage = GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_HW_RENDER;
     t->win = display->create_window(t->rs, t->width, t->height, format, usage);
+    t->legacy = false;
     return t;
 }
 
 extern "C" void mir_DestroyWindow(struct _EGLNativeWindowType * t)
 {
     MirNativeWindowType* native_win = (MirNativeWindowType*) t;
-    native_win->display->destroy_window(native_win->win);
+    if (native_win->legacy)
+        native_win->display->destroy_window(native_win->win);
     delete native_win;
 }
 
@@ -135,6 +172,9 @@ extern "C" void mir_prepareSwap(
     EGLDisplay dpy, _EGLNativeWindowType* win, EGLint *damage_rects, EGLint damage_n_rects)
 {
     MirNativeWindowType* type = (MirNativeWindowType*)win;
+    if (type->legacy)
+        return;
+
     int width = -1;
     int height = -1;
     mir_render_surface_get_size(type->rs, &width, &height);
@@ -149,6 +189,13 @@ extern "C" void mir_prepareSwap(
 extern "C" void mir_setSwapInterval(
     EGLDisplay dpy, struct _EGLNativeWindowType* win, EGLint interval)
 {
+    MirNativeWindowType* type = (MirNativeWindowType*)win;
+    if (type->legacy)
+        return;
+
+    if (dpy == EGL_DEFAULT_DISPLAY)
+        return;
+
     ANativeWindow* anw = win->win;
     anw->setSwapInterval(anw, interval);
 }
@@ -157,6 +204,10 @@ extern "C" void
 mir_passthroughImageKHR(_EGLDisplay* disp, EGLContext *ctx,
     EGLenum *target, EGLClientBuffer *b, const EGLint **attrib_list)
 {
+    MirBaseDisplay* d = (MirBaseDisplay*) disp;
+    if (d->legacy)
+        return;
+
     MirDisplay* display = (MirDisplay*) disp;
     MirBuffer* buffer = (MirBuffer*) *b;
     *b = display->create_buffer(buffer);

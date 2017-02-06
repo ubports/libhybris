@@ -94,7 +94,7 @@ struct MirNativeWindowType : MirNativeWindowBase
     MirRenderSurface * rs;
     int width;
     int height;
-}; 
+};
 
 struct NullNativeWindowType : MirNativeWindowBase
 {
@@ -123,7 +123,7 @@ struct MirDisplay : MirBaseDisplay
 
     EGLNativeDisplayType to_native_display_type(MirConnection* connection)
     {
-        return ext->to_display(connection); 
+        return ext->to_display(connection);
     }
 
     struct _EGLNativeWindowType* create_window(
@@ -132,7 +132,7 @@ struct MirDisplay : MirBaseDisplay
         EGLint format = 0;
         eglGetConfigAttrib(dpy, config, EGL_NATIVE_VISUAL_ID, &format);
         return new MirNativeWindowType(ext, (MirRenderSurface*) win, format);
-    } 
+    }
 
     void destroy_window(ANativeWindow* window)
     {
@@ -207,11 +207,11 @@ struct NullDisplay : MirBaseDisplay
 
 extern "C" void mir_init_module(struct ws_egl_interface *egl_iface)
 {
-	int err;
-	hw_get_module(GRALLOC_HARDWARE_MODULE_ID, (const hw_module_t **) &gralloc);
-	err = gralloc_open((const hw_module_t *) gralloc, &alloc);
-	TRACE("++ %lu mir: got gralloc %p err:%s", pthread_self(), gralloc, strerror(-err));
-	eglplatformcommon_init(egl_iface, gralloc, alloc);
+    int err;
+    hw_get_module(GRALLOC_HARDWARE_MODULE_ID, (const hw_module_t **) &gralloc);
+    err = gralloc_open((const hw_module_t *) gralloc, &alloc);
+    TRACE("++ %lu mir: got gralloc %p err:%s", pthread_self(), gralloc, strerror(-err));
+    eglplatformcommon_init(egl_iface, gralloc, alloc);
 }
 
 extern "C" _EGLDisplay *mir_GetDisplay(EGLNativeDisplayType display)
@@ -274,14 +274,14 @@ mir_passthroughImageKHR(_EGLDisplay* disp, EGLContext *ctx,
 }
 
 struct ws_module ws_module_info = {
-	mir_init_module,
-	mir_GetDisplay,
-	mir_Terminate,
-	mir_CreateWindow,
-	mir_DestroyWindow,
-	eglplatformcommon_eglGetProcAddress,
-	mir_passthroughImageKHR,
-	eglplatformcommon_eglQueryString,
+    mir_init_module,
+    mir_GetDisplay,
+    mir_Terminate,
+    mir_CreateWindow,
+    mir_DestroyWindow,
+    eglplatformcommon_eglGetProcAddress,
+    mir_passthroughImageKHR,
+    eglplatformcommon_eglQueryString,
     mir_prepareSwap,
     NULL,
     mir_setSwapInterval

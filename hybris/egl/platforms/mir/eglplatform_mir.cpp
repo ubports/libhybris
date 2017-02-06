@@ -236,7 +236,7 @@ extern "C" _EGLDisplay *mir_GetDisplay(EGLNativeDisplayType display)
 extern "C" void mir_Terminate(_EGLDisplay *dpy)
 {
     MirBaseDisplay* d = (MirBaseDisplay*) dpy;
-	delete d;
+    delete d;
 }
 
 extern "C" struct _EGLNativeWindowType *mir_CreateWindow(EGLNativeWindowType win, _EGLDisplay *dis, EGLConfig config)

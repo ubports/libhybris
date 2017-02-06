@@ -48,14 +48,13 @@ static void nullws_Terminate(struct _EGLDisplay *dpy)
 	free(dpy);
 }
 
-static struct _EGLNativeWindowType *nullws_CreateWindow(EGLNativeWindowType win, struct _EGLDisplay *display)
+static struct _EGLNativeWindowType *nullws_CreateWindow(EGLNativeWindowType win, struct _EGLDisplay *display, EGLConfig config)
 {
     struct _EGLNativeWindowType* type = malloc(sizeof(struct _EGLNativeWindowType));
 	if (win == 0)
         type->win = android_createDisplaySurface();
 	else
 		type->win = win;
-    printf("NULL PLATFORM SSS %X\n", (int)(long)type);
     return type;
 }
 

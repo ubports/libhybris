@@ -168,7 +168,7 @@ extern "C" void waylandws_Terminate(_EGLDisplay *dpy)
 	delete wdpy;
 }
 
-extern "C" EGLNativeWindowType waylandws_CreateWindow(EGLNativeWindowType win, _EGLDisplay *display)
+extern "C" EGLNativeWindowType waylandws_CreateWindow(EGLNativeWindowType win, _EGLDisplay *display, EGLConfig)
 {
 	struct wl_egl_window *wl_window = (struct wl_egl_window*) win;
 	struct wl_display *wl_display = (struct wl_display*) display;

@@ -68,9 +68,8 @@ extern "C" struct _EGLNativeWindowType *fbdevws_CreateWindow(EGLNativeWindowType
 	_nativewindow = new FbDevNativeWindow(alloc, framebuffer);
 	_nativewindow->common.incRef(&_nativewindow->common);
     struct _EGLNativeWindowType* type = new struct _EGLNativeWindowType;
-//	type->win = (EGLNativeWindowType) static_cast<struct ANativeWindow *>(_nativewindow);
+	type->win = (EGLNativeWindowType) static_cast<struct ANativeWindow *>(_nativewindow);
 	return type;
-	//return (EGLNativeWindowType) static_cast<struct ANativeWindow *>(_nativewindow);
 }
 
 extern "C" void fbdevws_DestroyWindow(struct _EGLNativeWindowType *win)

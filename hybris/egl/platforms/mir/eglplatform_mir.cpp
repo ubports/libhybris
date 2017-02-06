@@ -1,4 +1,3 @@
-
 #define ANDROID
 #include <EGL/eglplatform.h>
 #include <mir_toolkit/mir_extension_core.h>
@@ -20,20 +19,106 @@ extern "C" {
 
 static gralloc_module_t *gralloc = 0;
 static alloc_device_t *alloc = 0;
+static unsigned int const usage = GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_HW_RENDER;
+
+struct MirNativeWindowBase : _EGLNativeWindowType
+{
+    virtual ~MirNativeWindowBase() {};
+    virtual void prepareSwap() = 0;
+    virtual void setSwapInterval(EGLint interval) = 0;
+protected:
+    MirNativeWindowBase() {};
+private:
+    MirNativeWindowBase(MirNativeWindowBase const&);
+    MirNativeWindowBase& operator=(MirNativeWindowBase const&);
+};
 
 struct MirBaseDisplay : _EGLDisplay
 {
-    bool legacy;
+    MirBaseDisplay(EGLDisplay display)
+    {
+        dpy = display;
+    }
+
+    virtual struct _EGLNativeWindowType* create_window(
+        EGLNativeWindowType win, EGLConfig config) = 0;
+    virtual void destroy_window(ANativeWindow* window) = 0;
+    virtual void passthrough_img(EGLContext *ctx, EGLenum *target, EGLClientBuffer *b, const EGLint **attrib_list) = 0;
+
+protected:
+    MirBaseDisplay() {}
+private:
+    MirBaseDisplay(MirBaseDisplay const&);
+    MirBaseDisplay& operator=(MirBaseDisplay const&);
+};
+
+
+struct MirNativeWindowType : MirNativeWindowBase
+{
+    MirNativeWindowType(
+        MirExtensionAndroidEGLV1 const* ext,
+        MirRenderSurface* surface, EGLint format)
+    {
+        int width = -1;
+        int height = -1;
+        mir_render_surface_get_size(surface, &width, &height);
+        win = ext->create_window(surface, width, height, format, usage);
+        rs = surface;
+    }
+
+    ~MirNativeWindowType()
+    {
+        ext->destroy_window(win);
+    }
+
+    void prepareSwap()
+    {
+        int w = -1;
+        int h = -1;
+        mir_render_surface_get_size(rs, &w, &h);
+        if (w != width || h != height)
+        {
+            native_window_set_buffers_dimensions(win, w, h);
+            width = w;
+            height = h;
+        }
+    }
+
+    void setSwapInterval(EGLint interval)
+    {
+        ANativeWindow* anw = win;
+        anw->setSwapInterval(anw, interval);
+    }
+
+    MirExtensionAndroidEGLV1 const* ext;
+    MirRenderSurface * rs;
+    int width;
+    int height;
+}; 
+
+struct NullNativeWindowType : MirNativeWindowBase
+{
+    NullNativeWindowType(EGLNativeWindowType t)
+    {
+        win = t;
+    }
+
+    void prepareSwap()
+    {
+    }
+
+    void setSwapInterval(EGLint interval)
+    {
+    }
 };
 
 struct MirDisplay : MirBaseDisplay
 {
     MirDisplay(MirConnection* con, MirExtensionAndroidEGLV1 const* ext) :
+        MirBaseDisplay(ext->to_display(connection)),
         connection(con),
         ext(ext)
     {
-        dpy = to_native_display_type(connection);
-        legacy = false;
     }
 
     EGLNativeDisplayType to_native_display_type(MirConnection* connection)
@@ -41,18 +126,24 @@ struct MirDisplay : MirBaseDisplay
         return ext->to_display(connection); 
     }
 
-    ANativeWindow* create_window(
-        MirRenderSurface* rs,
-        int width, int height,
-        unsigned int hal_pixel_format,
-        unsigned int gralloc_usage_flags)
+    struct _EGLNativeWindowType* create_window(
+        EGLNativeWindowType win, EGLConfig config)
     {
-        return ext->create_window(rs, width, height, hal_pixel_format, gralloc_usage_flags);
+        EGLint format = 0;
+        eglGetConfigAttrib(dpy, config, EGL_NATIVE_VISUAL_ID, &format);
+        return new MirNativeWindowType(ext, (MirRenderSurface*) win, format);
     } 
 
     void destroy_window(ANativeWindow* window)
     {
         ext->destroy_window(window);
+    }
+
+    void passthrough_img(EGLContext *ctx, EGLenum *target, EGLClientBuffer *b, const EGLint **attrib_list)
+    {
+        MirBuffer* buffer = (MirBuffer*) *b;
+        *b = create_buffer(buffer);
+        *target = EGL_NATIVE_BUFFER_ANDROID;
     }
 
     ANativeWindowBuffer* create_buffer(MirBuffer* buffer)
@@ -65,28 +156,52 @@ struct MirDisplay : MirBaseDisplay
         return ext->destroy_buffer(buffer);
     }
 
-    MirConnection* connection;
 private:
+    MirConnection* connection;
     MirExtensionAndroidEGLV1 const* ext;
 };
 
 struct ErrorDisplay : MirBaseDisplay
 {
-    ErrorDisplay()
+    ErrorDisplay() :
+        MirBaseDisplay(EGL_NO_DISPLAY)
     {
-        dpy = EGL_NO_DISPLAY;
-        legacy = false;
+    }
+
+    struct _EGLNativeWindowType* create_window(
+        EGLNativeWindowType win, EGLConfig config)
+    {
+        return NULL;
+    }
+
+    void destroy_window(ANativeWindow* window)
+    {
+    }
+
+    void passthrough_img(EGLContext *ctx, EGLenum *target, EGLClientBuffer *b, const EGLint **attrib_list)
+    {
     }
 };
-ErrorDisplay const error_display;
 
 static int const legacy_dpy = 12345;
-struct LegacyDisplay : MirBaseDisplay
+struct NullDisplay : MirBaseDisplay
 {
-    LegacyDisplay()
+    NullDisplay() :
+        MirBaseDisplay((EGLDisplay)&legacy_dpy)
     {
-        dpy = (EGLDisplay) &legacy_dpy;
-        legacy = true;
+    }
+
+    struct _EGLNativeWindowType* create_window(EGLNativeWindowType win, EGLConfig config)
+    {
+        return new NullNativeWindowType(win);
+    }
+
+    void destroy_window(ANativeWindow* window)
+    {
+    }
+
+    void passthrough_img(EGLContext *ctx, EGLenum *target, EGLClientBuffer *b, const EGLint **attrib_list)
+    {
     }
 };
 
@@ -95,7 +210,7 @@ extern "C" void mir_init_module(struct ws_egl_interface *egl_iface)
 	int err;
 	hw_get_module(GRALLOC_HARDWARE_MODULE_ID, (const hw_module_t **) &gralloc);
 	err = gralloc_open((const hw_module_t *) gralloc, &alloc);
-	TRACE("++ %lu wayland: got gralloc %p err:%s", pthread_self(), gralloc, strerror(-err));
+	TRACE("++ %lu mir: got gralloc %p err:%s", pthread_self(), gralloc, strerror(-err));
 	eglplatformcommon_init(egl_iface, gralloc, alloc);
 }
 
@@ -103,68 +218,36 @@ extern "C" _EGLDisplay *mir_GetDisplay(EGLNativeDisplayType display)
 {
     if (display == EGL_DEFAULT_DISPLAY)
     {
-        printf("RETURNING DEFAULT\n");
-        return new LegacyDisplay;
+        TRACE("++ %lu mir: using null mir platform", pthread_self());
+        return new NullDisplay;
     }
 
     MirConnection* connection = static_cast<MirConnection*>(display);
     MirExtensionAndroidEGLV1 const* ext =  mir_extension_android_egl_v1(connection);
-
     if (!ext)
     {
         HYBRIS_ERROR("could not access android extensions from mir library");
-        return const_cast<ErrorDisplay*>(&error_display);
+        return new ErrorDisplay;
     }
+    TRACE("++ %lu mir: using mir platform", pthread_self());
     return new MirDisplay(connection, ext);
 }
 
 extern "C" void mir_Terminate(_EGLDisplay *dpy)
 {
-	delete dpy;
+    MirBaseDisplay* d = (MirBaseDisplay*) dpy;
+	delete d;
 }
-
-struct MirNativeWindowType : _EGLNativeWindowType
-{
-    MirDisplay* display;
-    MirRenderSurface * rs;
-    int width;
-    int height;
-    bool legacy;
-};
 
 extern "C" struct _EGLNativeWindowType *mir_CreateWindow(EGLNativeWindowType win, _EGLDisplay *dis, EGLConfig config)
 {
     MirBaseDisplay* d = (MirBaseDisplay*) dis;
-    
-    if (d->legacy)
-    {
-        printf("LEGACY MAKE A WIN\n");
-        MirNativeWindowType* w = new MirNativeWindowType;
-        w->win = win;
-        w->legacy = true;
-        return w;
-    }
-
-    MirDisplay* display = (MirDisplay*) d;
-
-    MirNativeWindowType* t = new MirNativeWindowType;
-    t->display = display;
-    t->rs = (MirRenderSurface*) win;
-    mir_render_surface_get_size(t->rs, &t->width, &t->height);
-
-    EGLint format = 0;
-    eglGetConfigAttrib(display->dpy, config, EGL_NATIVE_VISUAL_ID, &format);
-    unsigned int usage = GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_HW_RENDER;
-    t->win = display->create_window(t->rs, t->width, t->height, format, usage);
-    t->legacy = false;
-    return t;
+    return d->create_window(win, config);
 }
 
 extern "C" void mir_DestroyWindow(struct _EGLNativeWindowType * t)
 {
     MirNativeWindowType* native_win = (MirNativeWindowType*) t;
-    if (native_win->legacy)
-        native_win->display->destroy_window(native_win->win);
     delete native_win;
 }
 
@@ -172,32 +255,14 @@ extern "C" void mir_prepareSwap(
     EGLDisplay dpy, _EGLNativeWindowType* win, EGLint *damage_rects, EGLint damage_n_rects)
 {
     MirNativeWindowType* type = (MirNativeWindowType*)win;
-    if (type->legacy)
-        return;
-
-    int width = -1;
-    int height = -1;
-    mir_render_surface_get_size(type->rs, &width, &height);
-    if (width != type->width || height != type->height)
-    {
-        native_window_set_buffers_dimensions(type->win, width, height);
-        type->width = width;
-        type->height = height;
-    }
+    type->prepareSwap();
 }
 
 extern "C" void mir_setSwapInterval(
     EGLDisplay dpy, struct _EGLNativeWindowType* win, EGLint interval)
 {
     MirNativeWindowType* type = (MirNativeWindowType*)win;
-    if (type->legacy)
-        return;
-
-    if (dpy == EGL_DEFAULT_DISPLAY)
-        return;
-
-    ANativeWindow* anw = win->win;
-    anw->setSwapInterval(anw, interval);
+    type->setSwapInterval(interval);
 }
 
 extern "C" void
@@ -205,13 +270,7 @@ mir_passthroughImageKHR(_EGLDisplay* disp, EGLContext *ctx,
     EGLenum *target, EGLClientBuffer *b, const EGLint **attrib_list)
 {
     MirBaseDisplay* d = (MirBaseDisplay*) disp;
-    if (d->legacy)
-        return;
-
-    MirDisplay* display = (MirDisplay*) disp;
-    MirBuffer* buffer = (MirBuffer*) *b;
-    *b = display->create_buffer(buffer);
-    *target = EGL_NATIVE_BUFFER_ANDROID;
+    d->passthrough_img(ctx, target, b, attrib_list);
 }
 
 struct ws_module ws_module_info = {

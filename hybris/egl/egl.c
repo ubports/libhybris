@@ -458,7 +458,7 @@ EGLBoolean eglWaitNative(EGLint engine)
 
 EGLBoolean _my_eglSwapBuffersWithDamageEXT(EGLDisplay dpy, EGLSurface surface, EGLint *rects, EGLint n_rects)
 {
-	EGLNativeWindowType win;
+	struct _EGLNativeWindowType* win;
 	EGLBoolean ret;
 	HYBRIS_TRACE_BEGIN("hybris-egl", "eglSwapBuffersWithDamageEXT", "");
 	EGL_DLSYM(&_eglSwapBuffers, "eglSwapBuffers");

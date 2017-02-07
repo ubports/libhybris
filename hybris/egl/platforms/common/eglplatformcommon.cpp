@@ -43,7 +43,7 @@ extern "C" int hybris_egl_has_mapping(EGLSurface surface)
 	return (*my_egl_interface->has_mapping)(surface);
 }
 
-EGLNativeWindowType hybris_egl_get_mapping(EGLSurface surface)
+struct _EGLNativeWindowType* hybris_egl_get_mapping(EGLSurface surface)
 {
 	return (*my_egl_interface->get_mapping)(surface);
 }

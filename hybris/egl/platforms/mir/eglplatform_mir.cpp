@@ -21,8 +21,7 @@
 #include <mir_toolkit/mir_extension_core.h>
 #include <mir_toolkit/extensions/android_egl.h>
 #include <mir_toolkit/mir_client_library.h>
-#include <mir_toolkit/client_types_nbs.h>
-#include <mir_toolkit/mir_render_surface.h>
+#include <mir_toolkit/rs/mir_render_surface.h>
 #include <android-config.h>
 #include <ws.h>
 #include <EGL/egl.h>

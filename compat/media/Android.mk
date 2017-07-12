@@ -21,9 +21,9 @@ LOCAL_C_INCLUDES := \
     frameworks/av/services/medialog \
     frameworks/av/services/camera/libcameraservice
 
-HAS_ANDROID_5 := $(shell test $(ANDROID_VERSION_MAJOR) -ge 5 && echo true)
+IS_ANDROID_5 := $(shell test $(ANDROID_VERSION_MAJOR) -ge 5 && echo true)
 
-ifeq ($(HAS_ANDROID_5),true)
+ifeq ($(IS_ANDROID_5),true)
 LOCAL_C_INCLUDES += system/media/camera/include
 
 # All devices having Android 5.x also have MediaCodecSource
@@ -34,7 +34,11 @@ endif
 
 LOCAL_MODULE := camera_service
 
-LOCAL_32_BIT_ONLY := true
+ifdef TARGET_2ND_ARCH
+LOCAL_MULTILIB := both
+LOCAL_MODULE_STEM_32 := $(if $(filter false,$(BOARD_UBUNTU_PREFER_32_BIT)),$(LOCAL_MODULE)$(TARGET_2ND_ARCH_MODULE_SUFFIX),$(LOCAL_MODULE))
+LOCAL_MODULE_STEM_64 := $(if $(filter false,$(BOARD_UBUNTU_PREFER_32_BIT)),$(LOCAL_MODULE),$(LOCAL_MODULE)_64)
+endif
 
 include $(BUILD_EXECUTABLE)
 
@@ -78,7 +82,6 @@ endif
 
 LOCAL_MODULE:= libmedia_compat_layer
 LOCAL_MODULE_TAGS := optional
-LOCAL_32_BIT_ONLY := true
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
@@ -108,7 +111,7 @@ LOCAL_C_INCLUDES := \
 	system/media/audio_utils/include \
 	frameworks/av/services/camera/libcameraservice
 
-IS_ANDROID_5 := $(shell test $(ANDROID_VERSION_MAJOR) -eq 5 && echo true)
+IS_ANDROID_5 := $(shell test $(ANDROID_VERSION_MAJOR) -ge 5 && echo true)
 ifeq ($(IS_ANDROID_5),true)
 LOCAL_C_INCLUDES += frameworks/native/include/media/openmax
 endif
@@ -126,8 +129,6 @@ LOCAL_C_INCLUDES+= \
 	$(TOP)/$(MTK_PATH_SOURCE)/frameworks/av/include
 endif
 
-LOCAL_32_BIT_ONLY := true
-
 include $(BUILD_SHARED_LIBRARY)
 
 # -------------------------------------------------
@@ -140,7 +141,6 @@ LOCAL_SRC_FILES:= \
 
 LOCAL_MODULE:= direct_media_test
 LOCAL_MODULE_TAGS := optional
-LOCAL_32_BIT_ONLY := true
 
 LOCAL_C_INCLUDES := \
 	$(HYBRIS_PATH)/include \
@@ -164,6 +164,10 @@ LOCAL_SHARED_LIBRARIES := \
 	libEGL \
 	libGLESv2
 
-LOCAL_32_BIT_ONLY := true
+ifdef TARGET_2ND_ARCH
+LOCAL_MULTILIB := both
+LOCAL_MODULE_STEM_32 := $(if $(filter false,$(BOARD_UBUNTU_PREFER_32_BIT)),$(LOCAL_MODULE)$(TARGET_2ND_ARCH_MODULE_SUFFIX),$(LOCAL_MODULE))
+LOCAL_MODULE_STEM_64 := $(if $(filter false,$(BOARD_UBUNTU_PREFER_32_BIT)),$(LOCAL_MODULE),$(LOCAL_MODULE)_64)
+endif
 
 include $(BUILD_EXECUTABLE)

@@ -8,7 +8,6 @@ LOCAL_SRC_FILES := camera_compatibility_layer.cpp
 
 LOCAL_MODULE := libcamera_compat_layer
 LOCAL_MODULE_TAGS := optional
-LOCAL_32_BIT_ONLY := true
 
 LOCAL_C_INCLUDES := \
 	$(HYBRIS_PATH)/include
@@ -32,7 +31,11 @@ LOCAL_SRC_FILES := direct_camera_test.cpp
 
 LOCAL_MODULE := direct_camera_test
 LOCAL_MODULE_TAGS := optional
-LOCAL_32_BIT_ONLY := true
+ifdef TARGET_2ND_ARCH
+LOCAL_MULTILIB := both
+LOCAL_MODULE_STEM_32 := $(if $(filter false,$(BOARD_UBUNTU_PREFER_32_BIT)),$(LOCAL_MODULE)$(TARGET_2ND_ARCH_MODULE_SUFFIX),$(LOCAL_MODULE))
+LOCAL_MODULE_STEM_64 := $(if $(filter false,$(BOARD_UBUNTU_PREFER_32_BIT)),$(LOCAL_MODULE),$(LOCAL_MODULE)_64)
+endif
 
 LOCAL_C_INCLUDES := \
 	$(HYBRIS_PATH)/include \

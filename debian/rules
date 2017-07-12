@@ -77,21 +77,44 @@ get-packaged-orig-source:
 		| gzip >../$(PKG_source)_$(UPS_version).orig.tar.gz
 	rm -rf $(PKG_source)-$(UPS_version)
 
-override_dh_auto_configure:
+ANDROID_HEADERS_PATH = /usr/include/android
+DEFAULT_CONFIGURATION = \
+	--enable-wayland \
+	--with-android-headers=$(ANDROID_HEADERS_PATH) \
+	--enable-property-cache
+ARCH_CONFIGURATION =
+
 ifeq ($(DEB_HOST_ARCH),$(findstring $(DEB_HOST_ARCH), armhf))
-	dh_auto_configure --sourcedirectory=hybris -- \
-		--enable-wayland \
-		--enable-arch=arm \
-		--with-android-headers=/usr/include/android \
-		--enable-mali-quirks \
-		--enable-property-cache
-else
-	dh_auto_configure --sourcedirectory=hybris -- \
-		--enable-wayland \
-		--enable-arch=x86 \
-		--with-android-headers=/usr/include/android \
-		--enable-property-cache
+ARCH_CONFIGURATION = \
+	--enable-arch=arm \
+	--enable-mali-quirks \
+	--enable-experimental
+# We enable the linker selection overrides here as we want to stay
+# with the jb linker on a range of selected production devices to
+# not cause any extra risk for regressions on them. They will
+# migrate to a newer linker version when ported to arm64.
+ARCH_CONFIGURATION += \
+	--enable-ubuntu-linker-overrides
 endif
+ifeq ($(DEB_HOST_ARCH),$(findstring $(DEB_HOST_ARCH), arm64))
+ARCH_CONFIGURATION = \
+	--enable-arch=arm64 \
+	--enable-mali-quirks \
+	--enable-experimental
+endif
+ifeq ($(DEB_HOST_ARCH),$(findstring $(DEB_HOST_ARCH), i386))
+ARCH_CONFIGURATION = \
+	--enable-arch=x86
+endif
+ifeq ($(DEB_HOST_ARCH),$(findstring $(DEB_HOST_ARCH), amd64))
+ARCH_CONFIGURATION = \
+	--enable-arch=x86
+endif
+
+override_dh_auto_configure:
+	dh_auto_configure --sourcedirectory=hybris -- \
+		$(DEFAULT_CONFIGURATION) \
+		$(ARCH_CONFIGURATION)
 
 override_dh_install:
 	# Fill in important variables

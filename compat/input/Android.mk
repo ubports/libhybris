@@ -10,7 +10,6 @@ LOCAL_SRC_FILES:= input_compatibility_layer.cpp
 
 LOCAL_MODULE:= libis_compat_layer
 LOCAL_MODULE_TAGS := optional
-LOCAL_32_BIT_ONLY := true
 
 LOCAL_SHARED_LIBRARIES := \
 	libinput \
@@ -30,7 +29,7 @@ LOCAL_SHARED_LIBRARIES += libinputservice
 LOCAL_C_INCLUDES += frameworks/base/services/input
 endif
 
-HAS_LIBINPUTFLINGER := $(shell test $(ANDROID_VERSION_MAJOR) -eq 5 && echo true)
+HAS_LIBINPUTFLINGER := $(shell test $(ANDROID_VERSION_MAJOR) -ge 5 && echo true)
 ifeq ($(HAS_LIBINPUTFLINGER),true)
 LOCAL_SHARED_LIBRARIES += libinputflinger libinputservice
 LOCAL_C_INCLUDES += \
@@ -54,7 +53,11 @@ LOCAL_SRC_FILES:= \
 
 LOCAL_MODULE:= direct_input_test
 LOCAL_MODULE_TAGS := optional
-LOCAL_32_BIT_ONLY := true
+ifdef TARGET_2ND_ARCH
+LOCAL_MULTILIB := both
+LOCAL_MODULE_STEM_32 := $(if $(filter false,$(BOARD_UBUNTU_PREFER_32_BIT)),$(LOCAL_MODULE)$(TARGET_2ND_ARCH_MODULE_SUFFIX),$(LOCAL_MODULE))
+LOCAL_MODULE_STEM_64 := $(if $(filter false,$(BOARD_UBUNTU_PREFER_32_BIT)),$(LOCAL_MODULE),$(LOCAL_MODULE)_64)
+endif
 
 LOCAL_C_INCLUDES := \
 	$(HYBRIS_PATH)/include \

@@ -48,6 +48,7 @@
 #include <signal.h>
 #include <setjmp.h>
 #include <sys/signalfd.h>
+#include <sys/uio.h>
 
 #include <sys/ipc.h>
 #include <sys/shm.h>
@@ -2355,6 +2356,10 @@ static const char *_hybris_hook_android_dlerror(void)
 
     return android_dlerror();
 }
+
+#if !defined(cfree)
+#define cfree free
+#endif
 
 static struct _hook hooks_common[] = {
     {"property_get", _hybris_hook_property_get },

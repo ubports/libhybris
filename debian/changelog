@@ -1,3 +1,10 @@
+libhybris (0.1.2+mariogrip2) xenial; urgency=medium
+
+  * Use mm linker for Android 7.(0/1) (sdk version 24/25)
+  * Fix failure to build with glibc 2.26
+
+ -- Marius Gripsgard <mariogrip@ubuntu.com>  Sat, 23 Sep 2017 00:20:41 +0200
+
 libhybris (0.1.1+ubports1) xenial; urgency=medium
 
   * Backport to xenial

@@ -7,8 +7,12 @@ if !WANT_ARCH_ARM64
 SUBDIRS += jb
 endif
 
-if WANT_EXPERIMENTAL
+if HAS_ANDROID_6_0_0
 SUBDIRS += mm
+endif
+
+if HAS_ANDROID_7_0_0
+SUBDIRS += n
 endif
 
 libhybris_common_la_SOURCES = \
@@ -18,11 +22,31 @@ libhybris_common_la_SOURCES = \
 	strlcat.c \
 	logging.c \
 	sysconf.c
+
+if WANT_ARM_TRACING
+libhybris_common_la_SOURCES += \
+	wrappers.c \
+	wrapper_code_generic_arm.c
+endif
+
 libhybris_common_la_CPPFLAGS = \
 	-I$(top_srcdir)/include \
 	$(ANDROID_HEADERS_CFLAGS) \
 	-I$(top_srcdir)/common \
 	-DLINKER_PLUGIN_DIR=\"$(libdir)/libhybris/linker\"
+
+if WANT_ADRENO_QUIRKS
+libhybris_common_la_CPPFLAGS += -DWANT_ADRENO_QUIRKS
+endif
+
+if WANT_ARM_TRACING
+# thumb mode not supported
+libhybris_common_la_CFLAGS = \
+	-marm
+libhybris_common_la_CPPFLAGS += \
+	-marm
+endif
+
 if WANT_TRACE
 libhybris_common_la_CPPFLAGS += -DDEBUG
 endif
@@ -38,8 +62,14 @@ endif
 if !WANT_ARCH_ARM64
 libhybris_common_la_CPPFLAGS += -DWANT_LINKER_JB
 endif
-if WANT_EXPERIMENTAL
+if HAS_ANDROID_6_0_0
 libhybris_common_la_CPPFLAGS += -DWANT_LINKER_MM
+endif
+if WANT_ARM_TRACING
+libhybris_common_la_CPPFLAGS += -DWANT_ARM_TRACING
+endif
+if HAS_ANDROID_7_0_0
+libhybris_common_la_CPPFLAGS += -DWANT_LINKER_N
 endif
 libhybris_common_la_LDFLAGS = \
 	-ldl \

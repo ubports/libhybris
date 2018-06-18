@@ -16,15 +16,13 @@
  *
  */
 
-#include "config.h"
-
 #include "hooks_shm.h"
+
+#define _GNU_SOURCE
 
 #include <stddef.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -38,11 +36,7 @@
 #define LOGD(message, ...) HYBRIS_DEBUG_LOG(HOOKS, message, ##__VA_ARGS__)
 
 #define HYBRIS_DATA_SIZE    4000
-#if defined(__LP64__)
-# define HYBRIS_SHM_MASK    0xFFFFFFFFFF000000ULL
-#else
-# define HYBRIS_SHM_MASK    0xFF000000UL
-#endif
+#define HYBRIS_SHM_MASK     0xFF000000UL
 #define HYBRIS_SHM_PATH     "/hybris_shm_data"
 
 /* Structure of a shared memory region */
@@ -133,7 +127,7 @@ static void _hybris_shm_init()
             _hybris_shm_fd = shm_open(HYBRIS_SHM_PATH, O_RDWR | O_CREAT, 0666);
             umask(pumask);
             if (_hybris_shm_fd >= 0) {
-                TEMP_FAILURE_RETRY(ftruncate( _hybris_shm_fd, size_to_map ));
+                ftruncate( _hybris_shm_fd, size_to_map );
                 /* Map the memory object */
                 _hybris_shm_data = (hybris_shm_data_t *)mmap( NULL, size_to_map,
                                              PROT_READ | PROT_WRITE, MAP_SHARED,
@@ -169,7 +163,7 @@ static void _hybris_shm_init()
  */
 static void _hybris_shm_extend_region()
 {
-    TEMP_FAILURE_RETRY(ftruncate( _hybris_shm_fd, _current_mapped_size + HYBRIS_DATA_SIZE ));
+    ftruncate( _hybris_shm_fd, _current_mapped_size + HYBRIS_DATA_SIZE );
     _hybris_shm_data->max_offset += HYBRIS_DATA_SIZE;
 
     _sync_mmap_with_shm();
@@ -183,8 +177,8 @@ static void _hybris_shm_extend_region()
   */
 int hybris_is_pointer_in_shm(void *ptr)
 {
-    if (((uintptr_t) ptr >= HYBRIS_SHM_MASK) &&
-                    ((uintptr_t) ptr <= HYBRIS_SHM_MASK_TOP))
+    if (((unsigned int) ptr >= HYBRIS_SHM_MASK) &&
+                    ((unsigned int) ptr <= HYBRIS_SHM_MASK_TOP))
         return 1;
 
     return 0;
@@ -208,7 +202,7 @@ void *hybris_get_shmpointer(hybris_shm_pointer_t handle)
         _sync_mmap_with_shm();  /* make sure our mmap is sync'ed */
 
         if (_hybris_shm_data != NULL) {
-            uintptr_t offset = handle & (~HYBRIS_SHM_MASK);
+            unsigned int offset = handle & (~HYBRIS_SHM_MASK);
             realpointer = &(_hybris_shm_data->data) + offset;
 
             /* Be careful when activating this trace: this method is called *a lot* !
@@ -250,7 +244,7 @@ hybris_shm_pointer_t hybris_shm_alloc(size_t size)
 
     /* there is now enough place in this pool */
     location = _hybris_shm_data->current_offset | HYBRIS_SHM_MASK;
-    LOGD("Allocated a shared object (size = %zu, at offset %d)", size, _hybris_shm_data->current_offset);
+    LOGD("Allocated a shared object (size = %d, at offset %d)", size, _hybris_shm_data->current_offset);
 
     _hybris_shm_data->current_offset += size;
 

@@ -77,7 +77,7 @@ get-packaged-orig-source:
 		| gzip >../$(PKG_source)_$(UPS_version).orig.tar.gz
 	rm -rf $(PKG_source)-$(UPS_version)
 
-ANDROID_HEADERS_PATH = /usr/include/android
+ANDROID_HEADERS_PATH = /usr/include/android-24
 DEFAULT_CONFIGURATION = \
 	--enable-wayland \
 	--with-android-headers=$(ANDROID_HEADERS_PATH) \

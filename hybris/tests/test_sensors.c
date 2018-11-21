@@ -56,9 +56,9 @@ static void print_sensor_info(int i, struct sensor_t const *s)
     printf("Version: 0x%x\n", s->version);
     printf("Handle: 0x%x\n", s->handle);
     printf("Type: %d\n", s->type);
-    printf("maxRange: %.f\n", s->maxRange);
-    printf("resolution: %.f\n", s->resolution);
-    printf("power: %.f mA\n", s->power);
+    printf("maxRange: %d\n", s->maxRange);
+    printf("resolution: %d\n", s->resolution);
+    printf("power: %d mA\n", s->power);
     printf("minDelay: %d\n", s->minDelay);
     //printf("fifoReservedEventCount: %d\n", s->fifoReservedEventCount);
     //printf("fifoMaxEventCount: %d\n", s->fifoMaxEventCount);

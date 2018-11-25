@@ -11,4 +11,8 @@ if WANT_WAYLAND
 SUBDIRS += wayland
 endif
 
+if WANT_MIR
+SUBDIRS += mir
+endif
+
 

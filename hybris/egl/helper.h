@@ -23,7 +23,7 @@
 
 
 #include <EGL/egl.h>
-
+#include "ws.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,16 +31,16 @@ extern "C" {
 
 
 /* Add new mapping from surface to window */
-void egl_helper_push_mapping(EGLSurface surface, EGLNativeWindowType window);
+void egl_helper_push_mapping(EGLSurface surface, struct _EGLNativeWindowType* window);
 
 /* Check if a mapping for a surface exist */
 int egl_helper_has_mapping(EGLSurface surface);
 
 /* Return (without removing) the mapping for a surface */
-EGLNativeWindowType egl_helper_get_mapping(EGLSurface surface);
+struct _EGLNativeWindowType* egl_helper_get_mapping(EGLSurface surface);
 
 /* Return and remove the mapping for a surface */
-EGLNativeWindowType egl_helper_pop_mapping(EGLSurface surface);
+struct _EGLNativeWindowType* egl_helper_pop_mapping(EGLSurface surface);
 
 
 #ifdef __cplusplus

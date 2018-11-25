@@ -61,17 +61,19 @@ extern "C" void fbdevws_Terminate(_EGLDisplay *dpy)
 	delete dpy;
 }
 
-extern "C" EGLNativeWindowType fbdevws_CreateWindow(EGLNativeWindowType win, _EGLDisplay *display)
+extern "C" struct _EGLNativeWindowType *fbdevws_CreateWindow(EGLNativeWindowType win, _EGLDisplay *display, EGLConfig)
 {
 	assert (gralloc != NULL);
 	assert (_nativewindow == NULL);
 
 	_nativewindow = new FbDevNativeWindow(alloc, framebuffer);
 	_nativewindow->common.incRef(&_nativewindow->common);
-	return (EGLNativeWindowType) static_cast<struct ANativeWindow *>(_nativewindow);
+    struct _EGLNativeWindowType* type = new struct _EGLNativeWindowType;
+	type->win = (EGLNativeWindowType) static_cast<struct ANativeWindow *>(_nativewindow);
+	return type;
 }
 
-extern "C" void fbdevws_DestroyWindow(EGLNativeWindowType win)
+extern "C" void fbdevws_DestroyWindow(struct _EGLNativeWindowType *win)
 {
 	assert (_nativewindow != NULL);
 	assert (static_cast<FbDevNativeWindow *>((struct ANativeWindow *)win) == _nativewindow);
@@ -79,6 +81,7 @@ extern "C" void fbdevws_DestroyWindow(EGLNativeWindowType win)
 	_nativewindow->common.decRef(&_nativewindow->common);
 	/* We are done with it, refcounting will delete the window when appropriate */
 	_nativewindow = NULL;
+	delete win;
 }
 
 extern "C" __eglMustCastToProperFunctionPointerType fbdevws_eglGetProcAddress(const char *procname) 
@@ -86,14 +89,14 @@ extern "C" __eglMustCastToProperFunctionPointerType fbdevws_eglGetProcAddress(co
 	return eglplatformcommon_eglGetProcAddress(procname);
 }
 
-extern "C" void fbdevws_passthroughImageKHR(EGLContext *ctx, EGLenum *target, EGLClientBuffer *buffer, const EGLint **attrib_list)
+extern "C" void fbdevws_passthroughImageKHR(_EGLDisplay* display, EGLContext *ctx, EGLenum *target, EGLClientBuffer *buffer, const EGLint **attrib_list)
 {
-	eglplatformcommon_passthroughImageKHR(ctx, target, buffer, attrib_list);
+	eglplatformcommon_passthroughImageKHR(display, ctx, target, buffer, attrib_list);
 }
 
-extern "C" void fbdevws_setSwapInterval(EGLDisplay dpy, EGLNativeWindowType win, EGLint interval)
+extern "C" void fbdevws_setSwapInterval(EGLDisplay dpy, _EGLNativeWindowType* win, EGLint interval)
 {
-	FbDevNativeWindow *window = static_cast<FbDevNativeWindow *>((struct ANativeWindow *)win);
+	FbDevNativeWindow *window = static_cast<FbDevNativeWindow *>((struct ANativeWindow *)win->win);
 	window->setSwapInterval(interval);
 }
 

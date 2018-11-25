@@ -25,10 +25,10 @@
 
 
 /* Keep track of active EGL window surfaces */
-static std::map<EGLSurface,EGLNativeWindowType> _surface_window_map;
+static std::map<EGLSurface, _EGLNativeWindowType*> _surface_window_map;
 
 
-void egl_helper_push_mapping(EGLSurface surface, EGLNativeWindowType window)
+void egl_helper_push_mapping(EGLSurface surface, _EGLNativeWindowType* window)
 {
     assert(!egl_helper_has_mapping(surface));
 
@@ -40,9 +40,9 @@ int egl_helper_has_mapping(EGLSurface surface)
     return (_surface_window_map.find(surface) != _surface_window_map.end());
 }
 
-EGLNativeWindowType egl_helper_get_mapping(EGLSurface surface)
+_EGLNativeWindowType* egl_helper_get_mapping(EGLSurface surface)
 {
-    std::map<EGLSurface,EGLNativeWindowType>::iterator it;
+    std::map<EGLSurface,_EGLNativeWindowType*>::iterator it;
     it = _surface_window_map.find(surface);
 
     /* Caller must check with egl_helper_has_mapping() before */
@@ -51,15 +51,15 @@ EGLNativeWindowType egl_helper_get_mapping(EGLSurface surface)
     return it->second;
 }
 
-EGLNativeWindowType egl_helper_pop_mapping(EGLSurface surface)
+_EGLNativeWindowType* egl_helper_pop_mapping(EGLSurface surface)
 {
-    std::map<EGLSurface,EGLNativeWindowType>::iterator it;
+    std::map<EGLSurface,_EGLNativeWindowType*>::iterator it;
     it = _surface_window_map.find(surface);
 
     /* Caller must check with egl_helper_has_mapping() before */
     assert(it != _surface_window_map.end());
 
-    EGLNativeWindowType result = it->second;
+    _EGLNativeWindowType* result = it->second;
     _surface_window_map.erase(it);
     return result;
 }

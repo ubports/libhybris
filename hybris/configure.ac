@@ -85,6 +85,17 @@ AC_ARG_ENABLE(wayland,
   [wayland="no"])
 AM_CONDITIONAL( [WANT_WAYLAND], [test x"$wayland" = x"yes"])
 
+AC_ARG_ENABLE(mir,
+  [  --enable-mir            Enable mir support (default=disabled)],
+  [mir=$enableval
+	PKG_CHECK_MODULES(MIR_CLIENT, mirclient,, exit)
+	MIR_PREFIX=`$PKG_CONFIG --variable=prefix mirclient`
+
+	AC_DEFINE(WANT_MIR, [], [We want Mir support])
+],
+  [mir="no"])
+AM_CONDITIONAL( [WANT_MIR], [test x"$mir" = x"yes"])
+
 AC_ARG_ENABLE(wayland_serverside_buffers,
   [  --enable-wayland_serverside_buffers            Enable serverside buffer allocation for wayland (default=enabled)],
   [wayland_serverside_buffers=$enableval],
@@ -254,6 +265,7 @@ AC_CONFIG_FILES([
 	egl/platforms/null/Makefile
 	egl/platforms/fbdev/Makefile
 	egl/platforms/wayland/Makefile
+	egl/platforms/mir/Makefile
 	egl/platforms/hwcomposer/Makefile
 	egl/platforms/hwcomposer/hwcomposer-egl.pc
 	glesv1/glesv1_cm.pc

@@ -169,8 +169,9 @@ extern "C" void waylandws_Terminate(_EGLDisplay *dpy)
 	delete wdpy;
 }
 
-extern "C" EGLNativeWindowType waylandws_CreateWindow(EGLNativeWindowType win, _EGLDisplay *display)
+extern "C" struct _EGLNativeWindowType* waylandws_CreateWindow(EGLNativeWindowType win, _EGLDisplay *display, EGLConfig)
 {
+    struct _EGLNativeWindowType* type = (struct _EGLNativeWindowType*) malloc(sizeof(struct _EGLNativeWindowType));
 	struct wl_egl_window *wl_window = (struct wl_egl_window*) win;
 	struct wl_display *wl_display = (struct wl_display*) display;
 
@@ -192,10 +193,11 @@ extern "C" EGLNativeWindowType waylandws_CreateWindow(EGLNativeWindowType win, _
 
 	WaylandNativeWindow *window = new WaylandNativeWindow((struct wl_egl_window *) win, wdpy->wl_dpy, wdpy->wlegl, alloc, gralloc);
 	window->common.incRef(&window->common);
-	return (EGLNativeWindowType) static_cast<struct ANativeWindow *>(window);
+    type->win = (EGLNativeWindowType) static_cast<struct ANativeWindow *>(window);
+    return type;
 }
 
-extern "C" void waylandws_DestroyWindow(EGLNativeWindowType win)
+extern "C" void waylandws_DestroyWindow(struct _EGLNativeWindowType* win)
 {
 	WaylandNativeWindow *window = static_cast<WaylandNativeWindow *>((struct ANativeWindow *)win);
 	window->common.decRef(&window->common);
@@ -243,9 +245,9 @@ extern "C" __eglMustCastToProperFunctionPointerType waylandws_eglGetProcAddress(
 	return eglplatformcommon_eglGetProcAddress(procname);
 }
 
-extern "C" void waylandws_passthroughImageKHR(EGLContext *ctx, EGLenum *target, EGLClientBuffer *buffer, const EGLint **attrib_list)
+extern "C" void waylandws_passthroughImageKHR(struct _EGLDisplay* dpy, EGLContext *ctx, EGLenum *target, EGLClientBuffer *buffer, const EGLint **attrib_list)
 {
-	eglplatformcommon_passthroughImageKHR(ctx, target, buffer, attrib_list);
+	eglplatformcommon_passthroughImageKHR(dpy, ctx, target, buffer, attrib_list);
 }
 
 extern "C" const char *waylandws_eglQueryString(EGLDisplay dpy, EGLint name, const char *(*real_eglQueryString)(EGLDisplay dpy, EGLint name))
@@ -262,16 +264,16 @@ extern "C" const char *waylandws_eglQueryString(EGLDisplay dpy, EGLint name, con
 	return ret;
 }
 
-extern "C" void waylandws_prepareSwap(EGLDisplay dpy, EGLNativeWindowType win, EGLint *damage_rects, EGLint damage_n_rects)
+extern "C" void waylandws_prepareSwap(EGLDisplay dpy, _EGLNativeWindowType* win, EGLint *damage_rects, EGLint damage_n_rects)
 {
-	WaylandNativeWindow *window = static_cast<WaylandNativeWindow *>((struct ANativeWindow *)win);
+	WaylandNativeWindow *window = static_cast<WaylandNativeWindow *>((struct ANativeWindow *)win->win);
 	window->prepareSwap(damage_rects, damage_n_rects);
 }
 
-extern "C" void waylandws_finishSwap(EGLDisplay dpy, EGLNativeWindowType win)
+extern "C" void waylandws_finishSwap(EGLDisplay dpy, _EGLNativeWindowType* win)
 {
 	_init_egl_funcs(dpy);
-	WaylandNativeWindow *window = static_cast<WaylandNativeWindow *>((struct ANativeWindow *)win);
+	WaylandNativeWindow *window = static_cast<WaylandNativeWindow *>((struct ANativeWindow *)win->win);
 	if (_eglCreateSyncKHR) {
 		EGLSyncKHR sync = (*_eglCreateSyncKHR)(dpy, EGL_SYNC_FENCE_KHR, NULL);
 		(*_eglClientWaitSyncKHR)(dpy, sync, EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, EGL_FOREVER_KHR);
@@ -280,9 +282,9 @@ extern "C" void waylandws_finishSwap(EGLDisplay dpy, EGLNativeWindowType win)
 	window->finishSwap();
 }
 
-extern "C" void waylandws_setSwapInterval(EGLDisplay dpy, EGLNativeWindowType win, EGLint interval)
+extern "C" void waylandws_setSwapInterval(EGLDisplay dpy, _EGLNativeWindowType* win, EGLint interval)
 {
-	WaylandNativeWindow *window = static_cast<WaylandNativeWindow *>((struct ANativeWindow *)win);
+	WaylandNativeWindow *window = static_cast<WaylandNativeWindow *>((struct ANativeWindow *)win->win);
 	window->setSwapInterval(interval);
 }
 
@@ -299,7 +301,6 @@ struct ws_module ws_module_info = {
 	waylandws_finishSwap,
 	waylandws_setSwapInterval,
 };
-
 
 
 

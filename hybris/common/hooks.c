@@ -1829,9 +1829,7 @@ static int _hybris_hook_scandirat(int fd, const char *dir,
     int i = 0;
     size_t nItems = 0;
 
-
     int res = scandirat(fd, dir, &namelist_r, NULL, NULL);
-    TRACE_HOOK("dirp %p", dirp);
 
     if (res != 0 && namelist_r != NULL) {
 
@@ -1871,8 +1869,13 @@ static int _hybris_hook_scandirat(int fd, const char *dir,
     return res;
 }
 
+static int _hybris_hook_scandir(const char *dir,
+                      struct bionic_dirent ***namelist,
+                      int (*filter) (const struct bionic_dirent *),
+                      int (*compar) (const struct bionic_dirent **,
+                                     const struct bionic_dirent **))
+{
     return _hybris_hook_scandirat(AT_FDCWD, dir, namelist, filter, compar);
-
 }
 
 static inline void swap(void **a, void **b)

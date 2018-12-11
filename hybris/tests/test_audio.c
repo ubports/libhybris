@@ -35,7 +35,11 @@ int main(int argc, char **argv)
 
 	/* Initializing HAL */
 	hw_get_module_by_class(AUDIO_HARDWARE_MODULE_ID,
+#if defined(AUDIO_HARDWARE_MODULE_ID_PRIMARY)
 					AUDIO_HARDWARE_MODULE_ID_PRIMARY,
+#else
+					"primary",
+#endif
 					(const hw_module_t**) &hwmod);
 	if (!hwmod) {
 		fprintf(stderr, "Failed to get hw module id: %s name: %s, trying alternative.",
@@ -70,18 +74,22 @@ int main(int argc, char **argv)
 	assert(audiohw->init_check(audiohw) == 0);
 	fprintf(stdout, "Audio Hardware Interface initialized.\n");
 
+#if (ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 1) || (ANDROID_VERSION_MAJOR >= 5)
 	/* Check volume function calls */
 	if (audiohw->get_master_volume) {
 		float volume;
 		audiohw->get_master_volume(audiohw, &volume);
 		fprintf(stdout, "Master Volume: %f\n", volume);
 	}
+#endif
 
+#if (ANDROID_VERSION_MAJOR == 4 && ANDROID_VERSION_MINOR >= 2) || (ANDROID_VERSION_MAJOR >= 5)
 	if (audiohw->get_master_mute) {
 		bool mute;
 		audiohw->get_master_mute(audiohw, &mute);
 		fprintf(stdout, "Master Mute: %d\n", mute);
 	}
+#endif
 
 	/* Check output and input streams */
 	struct audio_config config_out = {

@@ -22,6 +22,13 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <string.h>
+
+#if ANDROID_VERSION_MAJOR>=4 && ANDROID_VERSION_MINOR>=2 || ANDROID_VERSION_MAJOR>=5
+extern "C" {
+#include <sync/sync.h>
+};
+#endif
 
 #define FRAMEBUFFER_PARTITIONS 2
 
@@ -260,6 +267,16 @@ int FbDevNativeWindow::queueBuffer(BaseNativeWindowBuffer* buffer, int fenceFd)
 
     pthread_mutex_unlock(&_mutex);
 
+#if ANDROID_VERSION_MAJOR>=4 && ANDROID_VERSION_MINOR>=2 || ANDROID_VERSION_MAJOR>=5
+    HYBRIS_TRACE_BEGIN("fbdev-platform", "queueBuffer_waiting_for_fence", "-%p", fbnb);
+    if (fenceFd >= 0)
+    {
+        sync_wait(fenceFd, -1);
+        close(fenceFd);
+    }
+    HYBRIS_TRACE_END("fbdev-platform", "queueBuffer_waiting_for_fence", "-%p", fbnb);
+#endif
+
     HYBRIS_TRACE_BEGIN("fbdev-platform", "queueBuffer-post", "-%p", fbnb);
 
     int rv = m_fbDev->post(m_fbDev, fbnb->handle);
@@ -442,7 +459,13 @@ unsigned int FbDevNativeWindow::transformHint() const
     return 0;
 }
 
-
+/*
+ * returns the current usage of this window
+ */
+unsigned int FbDevNativeWindow::getUsage() const
+{
+    return m_usage;
+}
 
 /*
  *  native_window_set_usage(..., usage)

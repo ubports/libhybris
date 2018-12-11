@@ -18,6 +18,9 @@
 #ifndef _HYBRIS_HOOKS_H_
 #define _HYBRIS_HOOKS_H_
 
+#include <hybris/dlfcn/dlfcn.h>
+#include <hybris/common/binding.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif

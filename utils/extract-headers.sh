@@ -1,4 +1,4 @@
-#! /bin/sh
+#!/bin/sh
 
 ANDROID_ROOT=$1
 HEADERPATH=$2
@@ -46,8 +46,11 @@ if [ x$MAJOR = x -o x$MINOR = x -o x$PATCH = x ]; then
 $(IFS="." awk '/PLATFORM_VERSION := ([0-9.]+)/ { print $3; }' < $VERSION_DEFAULTS)
 EOF
 
-    if [ x$MAJOR = x -o x$MINOR = x -o x$PATCH = x ]; then
+    if [ x$MAJOR = x -o x$MINOR = x ]; then
         parse_defaults_failed
+    fi
+    if [ x$PATCH = x ]; then
+        PATCH=0
     fi
 
     echo -n "Auto-detected version: ${MAJOR}.${MINOR}.${PATCH}";echo "${PATCH2:+.${PATCH2}}${PATCH3:+.${PATCH3}}"
@@ -147,7 +150,8 @@ cat > $HEADERPATH/android-config.h << EOF
 #endif
 EOF
 
-cat <<< 'Name: Android header files
+cat > $HEADERPATH/android-headers.pc <<'EOF'
+Name: Android header files
 Description: Header files needed to write applications for the Android platform
 Version: androidversion
 
@@ -155,45 +159,81 @@ prefix=/usr
 exec_prefix=${prefix}
 includedir=${prefix}/include
 
-Cflags: -I${includedir}/android' > $HEADERPATH/android-headers.pc
+Cflags: -I${includedir}/android
+EOF
+
 sed -i -e s:androidversion:$MAJOR.$MINOR.$PATCH:g $HEADERPATH/android-headers.pc
 
 extract_headers_to hardware \
     hardware/libhardware/include/hardware
 
 extract_headers_to hardware_legacy \
-    hardware/libhardware_legacy/include/hardware_legacy/vibrator.h \
-    hardware/libhardware_legacy/include/hardware_legacy/audio_policy_conf.h
+    hardware/libhardware_legacy/include/hardware_legacy/vibrator.h
+if [ $MAJOR -ge 4 -a $MINOR -ge 1 -o $MAJOR -ge 5 ]; then
+    extract_headers_to hardware_legacy \
+        hardware/libhardware_legacy/include/hardware_legacy/audio_policy_conf.h \
+        hardware/libhardware_legacy/include/hardware_legacy/wifi.h
+fi
+
+if [ $MAJOR -ge 6 ]; then
+	extract_headers_to system \
+	    system/media/audio/include/system/audio.h
+fi
 
 extract_headers_to cutils \
     system/core/include/cutils
 
-extract_headers_to log \
-    system/core/include/log
+if [ $MAJOR -eq 4 -a $MINOR -ge 4 -o $MAJOR -ge 5 ]; then
+    extract_headers_to log \
+        system/core/include/log
+fi
 
-extract_headers_to system \
-    system/core/include/system
+if [ $MAJOR -ge 4 ]; then
+    extract_headers_to system \
+        system/core/include/system
+fi
 
 extract_headers_to android \
     system/core/include/android
 
-extract_headers_to linux \
-    bionic/libc/kernel/common/linux/sync.h \
-    bionic/libc/kernel/common/linux/sw_sync.h
+if [ $MAJOR -eq 4 -a $MINOR -ge 1 ]; then
+    extract_headers_to linux \
+        bionic/libc/kernel/common/linux/sync.h \
+        bionic/libc/kernel/common/linux/sw_sync.h
 
-extract_headers_to sync \
-    system/core/include/sync
+    extract_headers_to sync \
+        system/core/include/sync
+elif [ $MAJOR -ge 5 ]; then
+    extract_headers_to linux \
+        bionic/libc/kernel/uapi/linux/sync.h \
+        bionic/libc/kernel/uapi/linux/sw_sync.h
 
-extract_headers_to libnfc-nxp \
-    external/libnfc-nxp/inc \
-    external/libnfc-nxp/src
+    extract_headers_to sync \
+        system/core/libsync/include/sync
+fi
+
+if [ $MAJOR -eq 2 -a $MINOR -ge 3 -o $MAJOR -ge 3 ]; then
+    extract_headers_to libnfc-nxp \
+        external/libnfc-nxp/inc \
+        external/libnfc-nxp/src
+fi
 
 extract_headers_to private \
     system/core/include/private/android_filesystem_config.h
 
-extract_headers_to linux \
-    external/kernel-headers/original/linux/android_alarm.h \
-    external/kernel-headers/original/linux/binder.h
+if [ $MAJOR -ge 5 ]; then
+    extract_headers_to linux \
+        bionic/libc/kernel/uapi/linux/android_alarm.h \
+        bionic/libc/kernel/uapi/linux/binder.h
+elif [ $MAJOR -eq 2 -a $MINOR -ge 2 -o $MAJOR -ge 3 ]; then
+    extract_headers_to linux \
+        external/kernel-headers/original/linux/android_alarm.h \
+        external/kernel-headers/original/linux/binder.h
+else
+    extract_headers_to linux \
+        bionic/libc/kernel/common/linux/android_alarm.h \
+        bionic/libc/kernel/common/linux/binder.h
+fi
 
 # In order to make it easier to trace back the origins of headers, fetch
 # some repository information from the Git source tree (if available).
@@ -241,13 +281,16 @@ fi
 cat > ${HEADERPATH}/Makefile << EOF
 PREFIX?=/usr/local
 INCLUDEDIR?=\$(PREFIX)/include/android
+PKGCONFIGDIR?=\$(PREFIX)/lib/pkgconfig
 all:
 	@echo "Use '\$(MAKE) install' to install"
 
 install:
 	mkdir -p \$(DESTDIR)/\$(INCLUDEDIR)
-	cp android-config.h android-version.h android-headers.pc \$(DESTDIR)/\$(INCLUDEDIR)
-	sed -i -e s:prefix=/usr:prefix=\$(PREFIX):g \$(DESTDIR)/\$(INCLUDEDIR)/android-headers.pc
+	mkdir -p \$(DESTDIR)/\$(PKGCONFIGDIR)
+	cp android-config.h android-version.h \$(DESTDIR)/\$(INCLUDEDIR)
+	cp android-headers.pc \$(DESTDIR)/\$(PKGCONFIGDIR)
+	sed -i -e s:prefix=/usr:prefix=\$(PREFIX):g \$(DESTDIR)/\$(PKGCONFIGDIR)/android-headers.pc
 	cp -r hardware \$(DESTDIR)/\$(INCLUDEDIR)
 	cp -r hardware_legacy \$(DESTDIR)/\$(INCLUDEDIR)
 	cp -r cutils \$(DESTDIR)/\$(INCLUDEDIR)
@@ -257,6 +300,7 @@ install:
 	cp -r sync \$(DESTDIR)/\$(INCLUDEDIR)
 	cp -r libnfc-nxp \$(DESTDIR)/\$(INCLUDEDIR)
 	cp -r private \$(DESTDIR)/\$(INCLUDEDIR)
+	cp -r log \$(DESTDIR)/\$(INCLUDEDIR)
 EOF
 
 find "$HEADERPATH" -type f -exec chmod 0644 {} \;

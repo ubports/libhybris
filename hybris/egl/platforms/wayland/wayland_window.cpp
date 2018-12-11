@@ -30,6 +30,7 @@
 #include "wayland-egl-priv.h"
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 
 #include "logging.h"
@@ -685,6 +686,13 @@ unsigned int WaylandNativeWindow::type() const {
 unsigned int WaylandNativeWindow::transformHint() const {
     TRACE("WARN: stub");
     return 0;
+}
+
+/*
+ * returns the current usage of this window
+ */
+unsigned int WaylandNativeWindow::getUsage() const {
+    return m_usage;
 }
 
 int WaylandNativeWindow::setBuffersFormat(int format) {

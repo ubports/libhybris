@@ -4,11 +4,12 @@ Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
 Build-Depends: debhelper (>= 9.0.0),
                autotools-dev,
                dh-autoreconf,
-               android-headers (>= 4.4.2),
+               android-headers-24,
                quilt,
                pkg-config,
                libgles2-mesa-dev,
-               libwayland-dev
+               libwayland-dev,
+               ocl-icd-opencl-dev
 Standards-Version: 3.9.7
 Section: libs
 Vcs-Git: https://git.launchpad.net/~libhybris-maintainers/libhybris/+git/libhybris
@@ -50,7 +51,7 @@ Package: libmedia-dev
 Section: libdevel
 Architecture: armhf arm64 i386 amd64
 Depends: libmedia1 (= ${binary:Version}),
-         android-headers (>= 4.4.2),
+         android-headers-24,
          ${misc:Depends}
 Replaces: libhybris-dev (<< 0.1.0+git20130606+c5d897a-0ubuntu24)
 Breaks: libhybris-dev (<< 0.1.0+git20130606+c5d897a-0ubuntu24)
@@ -79,7 +80,7 @@ Package: libhardware-dev
 Section: libdevel
 Architecture: armhf arm64 i386 amd64
 Depends: libhardware2 (= ${binary:Version}),
-         android-headers (>= 4.4.2),
+         android-headers-24,
          ${misc:Depends}
 Replaces: libhybris-dev (<< 0.1.0+git20130606+c5d897a-0ubuntu13)
 Breaks: libhybris-dev (<< 0.1.0+git20130606+c5d897a-0ubuntu13)
@@ -134,7 +135,7 @@ Package: libhybris-dev
 Section: libdevel
 Architecture: armhf arm64 i386 amd64
 Depends: libhybris (= ${binary:Version}),
-         android-headers (>= 4.4.2),
+         android-headers-24,
          libandroid-properties-dev (= ${binary:Version}),
          libhardware-dev (= ${binary:Version}),
          libmedia-dev (= ${binary:Version}),

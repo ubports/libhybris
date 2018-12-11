@@ -623,6 +623,13 @@ static int open_library(const char *name)
     if(name == 0) return -1;
     if(strlen(name) > 256) return -1;
 
+    if ((name[0] == '/') && (getenv("HYBRIS_LINKER_FORCE_BASENAME") != NULL))
+    {
+        const char *bname = strrchr(name, '/');
+        if ((bname != NULL) && ((fd = open_library(bname+1)) >= 0))
+            return fd;
+    }
+
     if ((name[0] == '/') && ((fd = _open_lib(name)) >= 0))
         return fd;
 
@@ -2337,7 +2344,11 @@ unsigned __linker_init(unsigned **elfdata) {
     return __linker_init_post_relocation(elfdata);
 }
 
+#ifdef WANT_ARM_TRACING
+void android_linker_init(int sdk_version, void *(get_hooked_symbol)(const char*, const char*), void *(create_wrapper)(const char*, void*, int)) {
+#else
 void android_linker_init(int sdk_version, void *(get_hooked_symbol)(const char*, const char*)) {
+#endif
    (void) sdk_version;
    _get_hooked_symbol = get_hooked_symbol;
 }

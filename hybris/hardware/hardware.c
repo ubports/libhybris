@@ -15,45 +15,17 @@
  *
  */
 
-#include <android-config.h>
 #include <dlfcn.h>
 #include <stddef.h>
 #include <errno.h>
 #include <hardware/hardware.h>
 #include <hybris/common/binding.h>
 
-static void *_libhardware = NULL;
+#pragma GCC visibility push(hidden)
+HYBRIS_LIBRARY_INITIALIZE(hardware, "libhardware.so");
+#pragma GCC visibility pop
 
-static int (*_hw_get_module)(const char *id, const struct hw_module_t **module) = NULL;
-
-static int (*_hw_get_module_by_class)(const char *class_id, const char *inst, const struct hw_module_t **module) = NULL;
-
-#define HARDWARE_DLSYM(fptr, sym) do { if (*(fptr) == NULL) { *(fptr) = (void *) android_dlsym(_libhardware, sym); } } while (0)
-
-static void *_init_lib_hardware()
-{
-	if (!_libhardware)
-		_libhardware = (void *) android_dlopen("libhardware.so", RTLD_LAZY);
-	return _libhardware;
-}
-
-int hw_get_module(const char *id, const struct hw_module_t **module)
-{
-	if (!_init_lib_hardware())
-		return -EINVAL;
-
-	HARDWARE_DLSYM(&_hw_get_module, "hw_get_module");
-	return (*_hw_get_module)(id, module);
-}
-
-int hw_get_module_by_class(const char *class_id, const char *inst,
-                           const struct hw_module_t **module)
-{
-	if (!_init_lib_hardware())
-		return -EINVAL;
-
-	HARDWARE_DLSYM(&_hw_get_module_by_class, "hw_get_module_by_class");
-	return (*_hw_get_module_by_class)(class_id, inst, module);
-}
+HYBRIS_IMPLEMENT_FUNCTION2(hardware, int, hw_get_module, const char *, const struct hw_module_t **);
+HYBRIS_IMPLEMENT_FUNCTION3(hardware, int, hw_get_module_by_class, const char *, const char *, const struct hw_module_t **);
 
 // vim:ts=4:sw=4:noexpandtab

@@ -48,11 +48,23 @@ AC_ARG_ENABLE(experimental,
   [experimental="no"])
 AM_CONDITIONAL( [WANT_EXPERIMENTAL], [test x"$experimental" = x"yes"])
 
+AC_ARG_ENABLE(adreno_quirks,
+  [  --enable-adreno-quirks     Enable adreno quirks (default=disabled)],
+  [adreno_quirks=$enableval],
+  [adreno_quirks="no"])
+AM_CONDITIONAL( [WANT_ADRENO_QUIRKS], [test x"$adreno_quirks" = x"yes"])
+
 AC_ARG_ENABLE(trace,
   [  --enable-trace            Enable TRACE statements (default=disabled)],
   [trace=$enableval],
   [trace="no"])
 AM_CONDITIONAL( [WANT_TRACE], [test x"$trace" = x"yes"])
+
+AC_ARG_ENABLE(mm_arm_tracing,
+  [  --enable-mm-arm-tracing            Enable ARM (32-bit only) tracing, useful for understanding what the blob is doing, currently only the mm linker is supported. (default=disabled)],
+  [mm_arm_tracing=$enableval],
+  [mm_arm_tracing="no"])
+AM_CONDITIONAL([WANT_ARM_TRACING], [test x"$mm_arm_tracing" = x"yes"])
 
 AC_ARG_ENABLE(mesa,
   [  --enable-mesa            Enable mesa headers (default=disabled)],
@@ -125,9 +137,9 @@ AC_ARG_WITH(default-egl-platform,
 AC_SUBST(DEFAULT_EGL_PLATFORM)
 
 if test "x$arch" = "xarm" -o "x$arch" = "xx86"; then
-  DEFAULT_HYBRIS_LD_LIBRARY_PATH="/vendor/lib:/system/lib"
+  DEFAULT_HYBRIS_LD_LIBRARY_PATH="/vendor/lib:/system/lib:/odm/lib"
 else
-  DEFAULT_HYBRIS_LD_LIBRARY_PATH="/vendor/lib64:/system/lib64"
+  DEFAULT_HYBRIS_LD_LIBRARY_PATH="/vendor/lib64:/system/lib64:/odm/lib64"
 fi
 AC_ARG_WITH(default-hybris-ld-library-path,
   [  --with-default-hybris-ld-library-path=PATH1:PATH2:...     Use PATH1:PATH2 for default HYBRIS_LD_LIBRARY_PATH if not specified by environment ],
@@ -202,9 +214,12 @@ AC_SUBST(ANDROID_VERSION_PATCH, [$android_headers_patch])
 AC_MSG_NOTICE("Android headers version is $android_headers_major.$android_headers_minor.$android_headers_patch")
 
 # Add automake tests for version/API needs here that you need in code, including test .am's
+AM_CONDITIONAL([HAS_ANDROID_7_0_0], [test $android_headers_major -ge 7 -a $android_headers_minor -ge 0 ])
+AM_CONDITIONAL([HAS_ANDROID_6_0_0], [test $android_headers_major -ge 6 -a $android_headers_minor -ge 0 ])
 AM_CONDITIONAL([HAS_ANDROID_5_0_0], [test $android_headers_major -ge 5 -a $android_headers_minor -ge 0 ])
 AM_CONDITIONAL([HAS_ANDROID_4_2_0], [test $android_headers_major -ge 4 -a $android_headers_minor -ge 2 ])
 AM_CONDITIONAL([HAS_ANDROID_4_1_0], [test $android_headers_major -ge 4 -a $android_headers_minor -ge 1 ])
+AM_CONDITIONAL([HAS_ANDROID_4_0_3], [test $android_headers_major -ge 4 -a $android_headers_patch -ge 3 ])
 AM_CONDITIONAL([HAS_ANDROID_4_0_0], [test $android_headers_major -ge 4 -a $android_headers_minor -ge 0 ])
 AM_CONDITIONAL([HAS_ANDROID_2_3_0], [test $android_headers_major -ge 2 -a $android_headers_minor -ge 3 ])
 
@@ -224,10 +239,13 @@ AC_CONFIG_FILES([
 	Makefile
 	properties/Makefile
 	properties/libandroid-properties.pc
+	camera/Makefile
+	camera/libcamera.pc
 	common/Makefile
 	common/jb/Makefile
 	common/stub/Makefile
 	common/mm/Makefile
+	common/n/Makefile
 	egl/egl.pc
 	egl/Makefile
 	egl/platforms/Makefile
@@ -250,13 +268,6 @@ AC_CONFIG_FILES([
 	libnfc_ndef_nxp/libnfc_ndef_nxp.pc
 	libsync/Makefile
 	libsync/libsync.pc
-	ui/Makefile
-	sf/Makefile
-	sf/libsf.pc
-	input/Makefile
-	input/libis.pc
-	camera/Makefile
-	camera/libcamera.pc
 	vibrator/Makefile
 	vibrator/libvibrator.pc
 	media/Makefile
@@ -264,7 +275,14 @@ AC_CONFIG_FILES([
 	wifi/Makefile
 	wifi/libwifi.pc
 	include/Makefile
+	input/Makefile
+	input/libis.pc
+	ui/Makefile
 	utils/Makefile
+	sf/Makefile
+	sf/libsf.pc
+	opencl/Makefile
+	opencl/OpenCL.pc
 	tests/Makefile
 ])
 

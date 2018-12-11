@@ -70,13 +70,25 @@
 #include <hybris/properties/properties.h>
 #include <hybris/common/hooks.h>
 
+#include <android-config.h>
+
+#ifdef WANT_ARM_TRACING
+#include "wrappers.h"
+#endif
+
 static locale_t hybris_locale;
 static int locale_inited = 0;
 static hybris_hook_cb hook_callback = NULL;
 
+#ifdef WANT_ARM_TRACING
+static void (*_android_linker_init)(int sdk_version, void* (*get_hooked_symbol)(const char*, const char*), void *(_create_wrapper)(const char*, void*, int)) = NULL;
+#else
 static void (*_android_linker_init)(int sdk_version, void* (*get_hooked_symbol)(const char*, const char*)) = NULL;
+#endif
+
 static void* (*_android_dlopen)(const char *filename, int flags) = NULL;
 static void* (*_android_dlsym)(void *handle, const char *symbol) = NULL;
+static void* (*_android_dlvsym)(void *handle, const char *symbol, const char* version) = NULL;
 static void* (*_android_dladdr)(void *addr, Dl_info *info) = NULL;
 static int (*_android_dlclose)(void *handle) = NULL;
 static const char* (*_android_dlerror)(void) = NULL;
@@ -113,14 +125,31 @@ static const char* (*_android_dlerror)(void) = NULL;
 #include "logging.h"
 #define LOGD(message, ...) HYBRIS_DEBUG_LOG(HOOKS, message, ##__VA_ARGS__)
 
-#ifdef DEBUG
 #define TRACE_HOOK(message, ...) \
-    if (hybris_should_trace(NULL, NULL)) { \
-        HYBRIS_DEBUG_LOG(HOOKS, message, ##__VA_ARGS__); \
-    }
-#else
-#define TRACE_HOOK(message, ...)
-#endif
+        HYBRIS_DEBUG_LOG(HOOKS, message, ##__VA_ARGS__);
+
+/*
+ * symbols that can be hooked directly shall use HOOK_DIRECT
+ * - during debug they will be redirected to a function that traces the calls
+ * - during normal execution they will be redirected to the glibc equivalent
+ */
+#define HOOK_DIRECT(symbol) {#symbol, symbol, _hybris_hook_##symbol}
+
+/*
+ * same as above but for symbols who have no dedicated debug wrapper
+ */
+#define HOOK_DIRECT_NO_DEBUG(symbol) {#symbol, symbol, symbol}
+
+/*
+ * symbols that can only be hooked directly to a (symbol with a different name)
+ * shall use HOOK_TO
+ */
+#define HOOK_TO(symbol, hook) {#symbol, hook, hook}
+
+/*
+ * symbols that can only be hooked indirectly shall use HOOK
+ */
+#define HOOK_INDIRECT(symbol) {#symbol, _hybris_hook_##symbol, _hybris_hook_##symbol}
 
 /* we have a value p:
  *  - if p <= ANDROID_TOP_ADDR_VALUE_MUTEX then it is an android mutex, not one we processed
@@ -130,6 +159,7 @@ static const char* (*_android_dlerror)(void) = NULL;
 struct _hook {
     const char *name;
     void *func;
+    void *debug_func;
 };
 
 /* pthread cond struct as done in Android */
@@ -264,6 +294,10 @@ static void *_hybris_hook_malloc(size_t size)
 {
     TRACE_HOOK("size %u", size);
 
+#ifdef WANT_ADRENO_QUIRKS
+    if(size == 4) size = 5;
+#endif
+
     void *res = malloc(size);
 
     TRACE_HOOK("res %p", res);
@@ -283,7 +317,7 @@ static void *_hybris_hook_memcpy(void *dst, const void *src, size_t len)
     TRACE_HOOK("dst %p src %p len %u", dst, src, len);
 
     if (src == NULL || dst == NULL)
-        return NULL;
+        return dst;
 
     return memcpy(dst, src, len);
 }
@@ -353,6 +387,9 @@ static int _hybris_hook_pthread_setspecific(pthread_key_t key, const void *ptr)
 static void* _hybris_hook_pthread_getspecific(pthread_key_t key)
 {
     TRACE_HOOK("key %d", key);
+
+    // see android_bionic/tests/pthread_test.cpp, test static_pthread_key_used_before_creation
+    if(!key) return NULL;
 
     return pthread_getspecific(key);
 }
@@ -1237,7 +1274,7 @@ static int _hybris_hook_pthread_rwlock_unlock(pthread_rwlock_t *__rwlock)
 
 #define min(X,Y) (((X) < (Y)) ? (X) : (Y))
 
-static pid_t _hybris_hook_pthread_gettid(pthread_t t)
+static pid_t _hybris_hook_pthread_gettid_np(pthread_t t)
 {
     TRACE_HOOK("thread %lu", (unsigned long) t);
 
@@ -1250,7 +1287,7 @@ static pid_t _hybris_hook_pthread_gettid(pthread_t t)
     return tid;
 }
 
-static int _hybris_hook_set_errno(int oi_errno)
+static int _hybris_hook___set_errno(int oi_errno)
 {
     TRACE_HOOK("errno %d", oi_errno);
 
@@ -1270,7 +1307,62 @@ static int _hybris_hook_set_errno(int oi_errno)
  * instead of calling one of the hooked methods.
  * Therefore we need to set __isthreaded to true, even if we are not in a multi-threaded context.
  */
-static int ___hybris_hook_isthreaded = 1;
+static int _hybris_hook___isthreaded = 1;
+
+/* "struct __sbuf" from bionic/libc/include/stdio.h */
+#if defined(__LP64__)
+struct bionic_sbuf {
+    unsigned char* _base;
+    size_t _size;
+};
+#else
+struct bionic_sbuf {
+    unsigned char *_base;
+    int _size;
+};
+#endif
+
+typedef off_t bionic_fpos_t;
+
+/* "struct __sFILE" from bionic/libc/include/stdio.h */
+struct __attribute__((packed)) bionic_file {
+    unsigned char *_p;      /* current position in (some) buffer */
+    int _r;                 /* read space left for getc() */
+    int _w;                 /* write space left for putc() */
+#if defined(__LP64__)
+    int _flags;             /* flags, below; this FILE is free if 0 */
+    int _file;              /* fileno, if Unix descriptor, else -1 */
+#else
+    short _flags;           /* flags, below; this FILE is free if 0 */
+    short _file;            /* fileno, if Unix descriptor, else -1 */
+#endif
+    struct bionic_sbuf _bf; /* the buffer (at least 1 byte, if !NULL) */
+    int _lbfsize;           /* 0 or -_bf._size, for inline putc */
+
+    /* operations */
+    void *_cookie;          /* cookie passed to io functions */
+    int (*_close)(void *);
+    int (*_read)(void *, char *, int);
+    bionic_fpos_t (*_seek)(void *, bionic_fpos_t, int);
+    int (*_write)(void *, const char *, int);
+
+    /* extension data, to avoid further ABI breakage */
+    struct bionic_sbuf _ext;
+    /* data for long sequences of ungetc() */
+    unsigned char *_up;     /* saved _p when _p is doing ungetc data */
+    int _ur;                /* saved _r when _r is counting ungetc data */
+
+    /* tricks to meet minimum requirements even when malloc() fails */
+    unsigned char _ubuf[3]; /* guarantee an ungetc() buffer */
+    unsigned char _nbuf[1]; /* guarantee a getc() buffer */
+
+    /* separate buffer for fgetln() when line crosses buffer boundary */
+    struct bionic_sbuf _lb; /* buffer for fgetln() */
+
+    /* Unix stdio files get aligned to block boundaries on fseek() */
+    int _blksize;           /* stat.st_blksize (may be != _bf._size) */
+    bionic_fpos_t _offset;         /* current lseek offset */
+};
 
 /*
  * redirection for bionic's __sF, which is defined as:
@@ -1330,6 +1422,14 @@ static int _hybris_hook_fflush(FILE *fp)
 {
     TRACE_HOOK("fp %p", fp);
 
+    if (fp == NULL) {
+        return 0;
+    }
+
+    if(fileno(_get_actual_fp(fp)) < 0) {
+        return 0;
+    }
+
     return fflush(_get_actual_fp(fp));
 }
 
@@ -1340,11 +1440,16 @@ static int _hybris_hook_fgetc(FILE *fp)
     return fgetc(_get_actual_fp(fp));
 }
 
-static int _hybris_hook_fgetpos(FILE *fp, fpos_t *pos)
+static int _hybris_hook_fgetpos(FILE *fp, bionic_fpos_t *pos)
 {
     TRACE_HOOK("fp %p pos %p", fp, pos);
 
-    return fgetpos(_get_actual_fp(fp), pos);
+    fpos_t my_fpos;
+    int ret = fgetpos(_get_actual_fp(fp), &my_fpos);
+
+    *pos = my_fpos.__pos;
+
+    return ret;
 }
 
 static char* _hybris_hook_fgets(char *s, int n, FILE *fp)
@@ -1424,11 +1529,16 @@ static int _hybris_hook_fseeko(FILE *fp, off_t offset, int whence)
     return fseeko(_get_actual_fp(fp), offset, whence);
 }
 
-static int _hybris_hook_fsetpos(FILE *fp, const fpos_t *pos)
+static int _hybris_hook_fsetpos(FILE *fp, const bionic_fpos_t *pos)
 {
     TRACE_HOOK("fp %p pos %p", fp, pos);
 
-    return fsetpos(_get_actual_fp(fp), pos);
+    fpos_t my_fpos;
+    my_fpos.__pos = *pos;
+    memset(&my_fpos.__state, 0, sizeof(mbstate_t));
+    mbsinit(&my_fpos.__state);
+
+    return fsetpos(_get_actual_fp(fp), &my_fpos);
 }
 
 static long _hybris_hook_ftell(FILE *fp)
@@ -1695,7 +1805,7 @@ static int _hybris_hook_readdir_r(DIR *dir, struct bionic_dirent *entry,
 }
 
 static int _hybris_hook_alphasort(struct bionic_dirent **a,
-                        struct bionic_dirent **b)
+                                  struct bionic_dirent **b)
 {
     return strcoll((*a)->d_name, (*b)->d_name);
 }
@@ -1706,20 +1816,20 @@ static int _hybris_hook_versionsort(struct bionic_dirent **a,
     return strverscmp((*a)->d_name, (*b)->d_name);
 }
 
-static struct bionic_dirent *_hybris_hook_scandirat(int fd, DIR *dirp,  struct bionic_dirent ***namelist,
-		int (*filter)(const struct bionic_dirent *),
-		int (*compar)(const struct bionic_dirent **, const struct bionic_dirent **))
+static int _hybris_hook_scandirat(int fd, const char *dir,
+                      struct bionic_dirent ***namelist,
+                      int (*filter) (const struct bionic_dirent *),
+                      int (*compar) (const struct bionic_dirent **,
+                                     const struct bionic_dirent **))
 {
     struct dirent **namelist_r;
-    static struct bionic_dirent **result;
+    struct bionic_dirent **result;
     struct bionic_dirent *filter_r;
 
     int i = 0;
     size_t nItems = 0;
 
-    TRACE_HOOK("dirp %p", dirp);
-
-    int res = scandirat(fd, dirp, &namelist_r, NULL, NULL);
+    int res = scandirat(fd, dir, &namelist_r, NULL, NULL);
 
     if (res != 0 && namelist_r != NULL) {
 
@@ -1750,7 +1860,7 @@ static struct bionic_dirent *_hybris_hook_scandirat(int fd, DIR *dirp,  struct b
 
             result[nItems++] = filter_r;
         }
-        if (nItems && compar != NULL)
+        if (nItems && compar != NULL) // sort
             qsort(result, nItems, sizeof(struct bionic_dirent *), compar);
 
         *namelist = result;
@@ -1759,11 +1869,13 @@ static struct bionic_dirent *_hybris_hook_scandirat(int fd, DIR *dirp,  struct b
     return res;
 }
 
-static struct bionic_dirent *_hybris_hook_scandir(DIR *dirp,  struct bionic_dirent ***namelist,
-		int (*filter)(const struct bionic_dirent *),
-		int (*compar)(const struct bionic_dirent **, const struct bionic_dirent **))
+static int _hybris_hook_scandir(const char *dir,
+                      struct bionic_dirent ***namelist,
+                      int (*filter) (const struct bionic_dirent *),
+                      int (*compar) (const struct bionic_dirent **,
+                                     const struct bionic_dirent **))
 {
-    return _hybris_hook_scandirat(AT_FDCWD, dirp, namelist, filter, compar);
+    return _hybris_hook_scandirat(AT_FDCWD, dir, namelist, filter, compar);
 }
 
 static inline void swap(void **a, void **b)
@@ -1793,11 +1905,13 @@ static int _hybris_hook_getaddrinfo(const char *hostname, const char *servname,
     if (fixed_hints)
         free(fixed_hints);
 
-    // fix bionic <- glibc missmatch
-    struct addrinfo *it = *res;
-    while (it) {
-        swap((void**) &(it->ai_canonname), (void**) &(it->ai_addr));
-        it = it->ai_next;
+    if(result == 0) {
+        // fix bionic <- glibc missmatch
+        struct addrinfo *it = *res;
+        while (it) {
+            swap((void**) &(it->ai_canonname), (void**) &(it->ai_addr));
+            it = it->ai_next;
+        }
     }
 
     return result;
@@ -1847,63 +1961,63 @@ static long int _hybris_hook_strtol(const char* str, char** endptr, int base)
     return strtol(str, endptr, base);
 }
 
-static int ___hybris_hook_system_property_read(const void *pi, char *name, char *value)
+static int _hybris_hook___system_property_read(const void *pi, char *name, char *value)
 {
     TRACE_HOOK("pi %p name '%s' value '%s'", pi, name, value);
 
     return property_get(name, value, NULL);
 }
 
-static int ___hybris_hook_system_property_foreach(void (*propfn)(const void *pi, void *cookie), void *cookie)
+static int _hybris_hook___system_property_foreach(void (*propfn)(const void *pi, void *cookie), void *cookie)
 {
     TRACE_HOOK("propfn %p cookie %p", propfn, cookie);
 
     return 0;
 }
 
-static const void *___hybris_hook_system_property_find(const char *name)
+static const void *_hybris_hook___system_property_find(const char *name)
 {
     TRACE_HOOK("name '%s'", name);
 
     return NULL;
 }
 
-static unsigned int ___hybris_hook_system_property_serial(const void *pi)
+static unsigned int _hybris_hook___system_property_serial(const void *pi)
 {
     TRACE_HOOK("pi %p", pi);
 
     return 0;
 }
 
-static int ___hybris_hook_system_property_wait(const void *pi)
+static int _hybris_hook___system_property_wait(const void *pi)
 {
     TRACE_HOOK("pi %p", pi);
 
     return 0;
 }
 
-static int ___hybris_hook_system_property_update(void *pi, const char *value, unsigned int len)
+static int _hybris_hook___system_property_update(void *pi, const char *value, unsigned int len)
 {
     TRACE_HOOK("pi %p value '%s' len %d", pi, value, len);
 
     return 0;
 }
 
-static int ___hybris_hook_system_property_add(const char *name, unsigned int namelen, const char *value, unsigned int valuelen)
+static int _hybris_hook___system_property_add(const char *name, unsigned int namelen, const char *value, unsigned int valuelen)
 {
     TRACE_HOOK("name '%s' namelen %d value '%s' valuelen %d",
                name, namelen, value, valuelen);
     return 0;
 }
 
-static unsigned int ___hybris_hook_system_property_wait_any(unsigned int serial)
+static unsigned int _hybris_hook___system_property_wait_any(unsigned int serial)
 {
     TRACE_HOOK("serial %d", serial);
 
     return 0;
 }
 
-static const void *___hybris_hook_system_property_find_nth(unsigned n)
+static const void *_hybris_hook___system_property_find_nth(unsigned n)
 {
     TRACE_HOOK("n %d", n);
 
@@ -1918,7 +2032,7 @@ static const void *___hybris_hook_system_property_find_nth(unsigned n)
  * implementation of our internal property handling
  */
 
-int _hybris_hook_system_property_get(const char *name, const char *value)
+int _hybris_hook___system_property_get(const char *name, const char *value)
 {
     TRACE_HOOK("name '%s' value '%s'", name, value);
 
@@ -2012,9 +2126,35 @@ int _hybris_hook_open(const char *pathname, int flags, ...)
     return open(target_path, flags, mode);
 }
 
+/**
+ * Wrap some GCC builtin functions, which don't have any address
+ */
+__THROW int _hybris_hook___sprintf_chk (char *__restrict __s, int __flag, size_t __slen,
+			  const char *__restrict __format, ...)
+{
+    int ret = 0;
+    va_list args;
+    va_start(args,__format);
+    ret = __vsprintf_chk (__s, __flag, __slen, __format, args);
+    va_end(args);
+
+    return ret;
+}
+__THROW int _hybris_hook___snprintf_chk (char *__restrict __s, size_t __n, int __flag,
+			   size_t __slen, const char *__restrict __format, ...)
+{
+    int ret = 0;
+    va_list args;
+    va_start(args,__format);
+    ret = __vsnprintf_chk (__s, __n, __flag, __slen, __format, args);
+    va_end(args);
+
+    return ret;
+}
+
 static __thread void *tls_hooks[16];
 
-static void *_hybris_hook_get_tls_hooks()
+static void *_hybris_hook___get_tls_hooks()
 {
     TRACE_HOOK("");
     return tls_hooks;
@@ -2049,7 +2189,7 @@ int _hybris_hook_prctl(int option, unsigned long arg2, unsigned long arg3,
 
 static char* _hybris_hook_basename(const char *path)
 {
-    static __thread char buf[PATH_MAX];
+    char buf[PATH_MAX];
 
     TRACE_HOOK("path '%s'", path);
 
@@ -2065,7 +2205,7 @@ static char* _hybris_hook_basename(const char *path)
 
 static char* _hybris_hook_dirname(char *path)
 {
-    static __thread char buf[PATH_MAX];
+    char buf[PATH_MAX];
 
     TRACE_HOOK("path '%s'", path);
 
@@ -2256,35 +2396,42 @@ static wint_t _hybris_hook_getwc(FILE *stream)
     return getwc(_get_actual_fp(stream));
 }
 
-static void *_hybris_hook_android_dlopen(const char *filename, int flag)
+static void *_hybris_hook_dlopen(const char *filename, int flag)
 {
     TRACE("filename %s flag %i", filename, flag);
 
     return _android_dlopen(filename,flag);
 }
 
-static void *_hybris_hook_android_dlsym(void *handle, const char *symbol)
+static void *_hybris_hook_dlsym(void *handle, const char *symbol)
 {
     TRACE("handle %p symbol %s", handle, symbol);
 
     return _android_dlsym(handle,symbol);
 }
 
-static void* _hybris_hook_android_dladdr(void *addr, Dl_info *info)
+static void *_hybris_hook_dlvsym(void *handle, const char *symbol, const char* version)
+{
+    TRACE("handle %p symbol %s version %s", handle, symbol, version);
+
+    return _android_dlvsym(handle,symbol,version);
+}
+
+static void* _hybris_hook_dladdr(void *addr, Dl_info *info)
 {
     TRACE("addr %p info %p", addr, info);
 
     return _android_dladdr(addr, info);
 }
 
-static int _hybris_hook_android_dlclose(void *handle)
+static int _hybris_hook_dlclose(void *handle)
 {
     TRACE("handle %p", handle);
 
     return _android_dlclose(handle);
 }
 
-static const char *_hybris_hook_android_dlerror(void)
+static const char *_hybris_hook_dlerror(void)
 {
     TRACE("");
 
@@ -2292,392 +2439,385 @@ static const char *_hybris_hook_android_dlerror(void)
 }
 
 static struct _hook hooks_common[] = {
-    {"property_get", _hybris_hook_property_get },
-    {"property_set", _hybris_hook_property_set },
-    {"__system_property_get", _hybris_hook_system_property_get },
-    {"getenv", _hybris_hook_getenv},
-    {"printf", printf },
-    {"malloc", _hybris_hook_malloc },
-    {"free", free },
-    {"calloc", calloc },
-    {"cfree", cfree },
-    {"realloc", realloc },
-    {"memalign", memalign },
-    {"valloc", valloc },
-    {"pvalloc", pvalloc },
-    {"fread", fread },
-    {"getxattr", getxattr},
-    {"mprotect", _hybris_hook_mprotect},
+
+    HOOK_DIRECT(property_get),
+    HOOK_DIRECT(property_set),
+    HOOK_INDIRECT(__system_property_get),
+    HOOK_DIRECT(getenv),
+    HOOK_DIRECT_NO_DEBUG(printf),
+    HOOK_INDIRECT(malloc),
+    HOOK_DIRECT_NO_DEBUG(free),
+    HOOK_DIRECT_NO_DEBUG(calloc),
+    HOOK_DIRECT_NO_DEBUG(cfree),
+    HOOK_DIRECT_NO_DEBUG(realloc),
+    HOOK_DIRECT_NO_DEBUG(memalign),
+    HOOK_DIRECT_NO_DEBUG(valloc),
+    HOOK_DIRECT_NO_DEBUG(pvalloc),
+    HOOK_DIRECT(fread),
+    HOOK_DIRECT_NO_DEBUG(getxattr),
+    HOOK_DIRECT(mprotect),
     /* string.h */
-    {"memccpy",memccpy},
-    {"memchr",memchr},
-    {"memrchr",memrchr},
-    {"memcmp",_hybris_hook_memcmp},
-    {"memcpy",_hybris_hook_memcpy},
-    {"memmove",memmove},
-    {"memset",memset},
-    {"memmem",memmem},
-    {"getlogin", getlogin},
-    // {"memswap",memswap},
-    {"index",index},
-    {"rindex",rindex},
-    {"strchr",strchr},
-    {"strrchr",strrchr},
-    {"strlen",_hybris_hook_strlen},
-    {"strcmp",_hybris_hook_strcmp},
-    {"strcpy",strcpy},
-    {"strcat",strcat},
-    {"strcasecmp",strcasecmp},
-    {"strncasecmp",strncasecmp},
-    {"strdup",strdup},
-    {"strstr",strstr},
-    {"strtok",strtok},
-    {"strtok_r",strtok_r},
-    {"strerror",_hybris_hook_strerror},
-    {"strerror_r",strerror_r},
-    {"strnlen",strnlen},
-    {"strncat",strncat},
-    {"strndup",strndup},
-    {"strncmp",strncmp},
-    {"strncpy",strncpy},
-    {"strtod", _hybris_hook_strtod},
-    {"strcspn",strcspn},
-    {"strpbrk",strpbrk},
-    {"strsep",strsep},
-    {"strspn",strspn},
-    {"strsignal",strsignal},
-    {"getgrnam", getgrnam},
-    {"strcoll",strcoll},
-    {"strxfrm",strxfrm},
+    HOOK_DIRECT_NO_DEBUG(memccpy),
+    HOOK_DIRECT_NO_DEBUG(memchr),
+    HOOK_DIRECT_NO_DEBUG(memrchr),
+    HOOK_DIRECT(memcmp),
+    HOOK_INDIRECT(memcpy),
+    HOOK_DIRECT_NO_DEBUG(memmove),
+    HOOK_DIRECT_NO_DEBUG(memset),
+    HOOK_DIRECT_NO_DEBUG(memmem),
+    HOOK_DIRECT_NO_DEBUG(getlogin),
+    // HOOK_DIRECT(memswap),
+    HOOK_DIRECT_NO_DEBUG(index),
+    HOOK_DIRECT_NO_DEBUG(rindex),
+    HOOK_DIRECT_NO_DEBUG(strchr),
+    HOOK_DIRECT_NO_DEBUG(strrchr),
+    HOOK_INDIRECT(strlen),
+    HOOK_INDIRECT(strcmp),
+    HOOK_DIRECT_NO_DEBUG(strcpy),
+    HOOK_DIRECT_NO_DEBUG(strcat),
+    HOOK_DIRECT_NO_DEBUG(strcasecmp),
+    HOOK_DIRECT_NO_DEBUG(strncasecmp),
+    HOOK_DIRECT_NO_DEBUG(strdup),
+    HOOK_DIRECT_NO_DEBUG(strstr),
+    HOOK_DIRECT_NO_DEBUG(strtok),
+    HOOK_DIRECT_NO_DEBUG(strtok_r),
+    HOOK_DIRECT(strerror),
+    HOOK_DIRECT_NO_DEBUG(strerror_r),
+    HOOK_DIRECT_NO_DEBUG(strnlen),
+    HOOK_DIRECT_NO_DEBUG(strncat),
+    HOOK_DIRECT_NO_DEBUG(strndup),
+    HOOK_DIRECT_NO_DEBUG(strncmp),
+    HOOK_DIRECT_NO_DEBUG(strncpy),
+    HOOK_INDIRECT(strtod),
+    HOOK_DIRECT_NO_DEBUG(strcspn),
+    HOOK_DIRECT_NO_DEBUG(strpbrk),
+    HOOK_DIRECT_NO_DEBUG(strsep),
+    HOOK_DIRECT_NO_DEBUG(strspn),
+    HOOK_DIRECT_NO_DEBUG(strsignal),
+    HOOK_DIRECT_NO_DEBUG(getgrnam),
+    HOOK_DIRECT_NO_DEBUG(strcoll),
+    HOOK_DIRECT_NO_DEBUG(strxfrm),
     /* strings.h */
-    {"bcmp",bcmp},
-    {"bcopy",bcopy},
-    {"bzero",bzero},
-    {"ffs",ffs},
-    {"index",index},
-    {"rindex",rindex},
-    {"strcasecmp",strcasecmp},
-    {"__sprintf_chk", __sprintf_chk},
-    {"__snprintf_chk", __snprintf_chk},
-    {"strncasecmp",strncasecmp},
-    /* dirent.h */
-    {"opendir", opendir},
-    {"closedir", closedir},
+    HOOK_DIRECT_NO_DEBUG(bcmp),
+    HOOK_DIRECT_NO_DEBUG(bcopy),
+    HOOK_DIRECT_NO_DEBUG(bzero),
+    HOOK_DIRECT_NO_DEBUG(ffs),
+    HOOK_INDIRECT(__sprintf_chk),
+    HOOK_INDIRECT(__snprintf_chk),
     /* pthread.h */
-    {"getauxval", getauxval},
-    {"gettid", _hybris_hook_gettid},
-    {"getpid", getpid},
-    {"pthread_atfork", pthread_atfork},
-    {"pthread_create", _hybris_hook_pthread_create},
-    {"pthread_kill", _hybris_hook_pthread_kill},
-    {"pthread_exit", pthread_exit},
-    {"pthread_join", pthread_join},
-    {"pthread_detach", pthread_detach},
-    {"pthread_self", pthread_self},
-    {"pthread_equal", pthread_equal},
-    {"pthread_getschedparam", pthread_getschedparam},
-    {"pthread_setschedparam", pthread_setschedparam},
-    {"pthread_mutex_init", _hybris_hook_pthread_mutex_init},
-    {"pthread_mutex_destroy", _hybris_hook_pthread_mutex_destroy},
-    {"pthread_mutex_lock", _hybris_hook_pthread_mutex_lock},
-    {"pthread_mutex_unlock", _hybris_hook_pthread_mutex_unlock},
-    {"pthread_mutex_trylock", _hybris_hook_pthread_mutex_trylock},
-    {"pthread_mutex_lock_timeout_np", _hybris_hook_pthread_mutex_lock_timeout_np},
-    {"pthread_mutex_timedlock", _hybris_hook_pthread_mutex_timedlock},
-    {"pthread_mutexattr_init", pthread_mutexattr_init},
-    {"pthread_mutexattr_destroy", pthread_mutexattr_destroy},
-    {"pthread_mutexattr_gettype", pthread_mutexattr_gettype},
-    {"pthread_mutexattr_settype", pthread_mutexattr_settype},
-    {"pthread_mutexattr_getpshared", pthread_mutexattr_getpshared},
-    {"pthread_mutexattr_setpshared", _hybris_hook_pthread_mutexattr_setpshared},
-    {"pthread_condattr_init", pthread_condattr_init},
-    {"pthread_condattr_getpshared", pthread_condattr_getpshared},
-    {"pthread_condattr_setpshared", pthread_condattr_setpshared},
-    {"pthread_condattr_destroy", pthread_condattr_destroy},
-    {"pthread_condattr_getclock", pthread_condattr_getclock},
-    {"pthread_condattr_setclock", pthread_condattr_setclock},
-    {"pthread_cond_init", _hybris_hook_pthread_cond_init},
-    {"pthread_cond_destroy", _hybris_hook_pthread_cond_destroy},
-    {"pthread_cond_broadcast", _hybris_hook_pthread_cond_broadcast},
-    {"pthread_cond_signal", _hybris_hook_pthread_cond_signal},
-    {"pthread_cond_wait", _hybris_hook_pthread_cond_wait},
-    {"pthread_cond_timedwait", _hybris_hook_pthread_cond_timedwait},
-    {"pthread_cond_timedwait_monotonic", _hybris_hook_pthread_cond_timedwait},
-    {"pthread_cond_timedwait_monotonic_np", _hybris_hook_pthread_cond_timedwait},
-    {"pthread_cond_timedwait_relative_np", _hybris_hook_pthread_cond_timedwait_relative_np},
-    {"pthread_key_delete", pthread_key_delete},
-    {"pthread_setname_np", _hybris_hook_pthread_setname_np},
-    {"pthread_once", pthread_once},
-    {"pthread_key_create", pthread_key_create},
-    {"pthread_setspecific", _hybris_hook_pthread_setspecific},
-    {"pthread_getspecific", _hybris_hook_pthread_getspecific},
-    {"pthread_attr_init", _hybris_hook_pthread_attr_init},
-    {"pthread_attr_destroy", _hybris_hook_pthread_attr_destroy},
-    {"pthread_attr_setdetachstate", _hybris_hook_pthread_attr_setdetachstate},
-    {"pthread_attr_getdetachstate", _hybris_hook_pthread_attr_getdetachstate},
-    {"pthread_attr_setschedpolicy", _hybris_hook_pthread_attr_setschedpolicy},
-    {"pthread_attr_getschedpolicy", _hybris_hook_pthread_attr_getschedpolicy},
-    {"pthread_attr_setschedparam", _hybris_hook_pthread_attr_setschedparam},
-    {"pthread_attr_getschedparam", _hybris_hook_pthread_attr_getschedparam},
-    {"pthread_attr_setstacksize", _hybris_hook_pthread_attr_setstacksize},
-    {"pthread_attr_getstacksize", _hybris_hook_pthread_attr_getstacksize},
-    {"pthread_attr_setstackaddr", _hybris_hook_pthread_attr_setstackaddr},
-    {"pthread_attr_getstackaddr", _hybris_hook_pthread_attr_getstackaddr},
-    {"pthread_attr_setstack", _hybris_hook_pthread_attr_setstack},
-    {"pthread_attr_getstack", _hybris_hook_pthread_attr_getstack},
-    {"pthread_attr_setguardsize", _hybris_hook_pthread_attr_setguardsize},
-    {"pthread_attr_getguardsize", _hybris_hook_pthread_attr_getguardsize},
-    {"pthread_attr_setscope", _hybris_hook_pthread_attr_setscope},
-    {"pthread_attr_getscope", _hybris_hook_pthread_attr_getscope},
-    {"pthread_getattr_np", _hybris_hook_pthread_getattr_np},
-    {"pthread_rwlockattr_init", _hybris_hook_pthread_rwlockattr_init},
-    {"pthread_rwlockattr_destroy", _hybris_hook_pthread_rwlockattr_destroy},
-    {"pthread_rwlockattr_setpshared", _hybris_hook_pthread_rwlockattr_setpshared},
-    {"pthread_rwlockattr_getpshared", _hybris_hook_pthread_rwlockattr_getpshared},
-    {"pthread_rwlock_init", _hybris_hook_pthread_rwlock_init},
-    {"pthread_rwlock_destroy", _hybris_hook_pthread_rwlock_destroy},
-    {"pthread_rwlock_unlock", _hybris_hook_pthread_rwlock_unlock},
-    {"pthread_rwlock_wrlock", _hybris_hook_pthread_rwlock_wrlock},
-    {"pthread_rwlock_rdlock", _hybris_hook_pthread_rwlock_rdlock},
-    {"pthread_rwlock_tryrdlock", _hybris_hook_pthread_rwlock_tryrdlock},
-    {"pthread_rwlock_trywrlock", _hybris_hook_pthread_rwlock_trywrlock},
-    {"pthread_rwlock_timedrdlock", _hybris_hook_pthread_rwlock_timedrdlock},
-    {"pthread_rwlock_timedwrlock", _hybris_hook_pthread_rwlock_timedwrlock},
+    HOOK_DIRECT_NO_DEBUG(getauxval),
+    HOOK_INDIRECT(gettid),
+    HOOK_DIRECT_NO_DEBUG(getpid),
+    HOOK_DIRECT_NO_DEBUG(pthread_atfork),
+    HOOK_INDIRECT(pthread_create),
+    HOOK_INDIRECT(pthread_kill),
+    HOOK_DIRECT_NO_DEBUG(pthread_exit),
+    HOOK_DIRECT_NO_DEBUG(pthread_join),
+    HOOK_DIRECT_NO_DEBUG(pthread_detach),
+    HOOK_DIRECT_NO_DEBUG(pthread_self),
+    HOOK_DIRECT_NO_DEBUG(pthread_equal),
+    HOOK_DIRECT_NO_DEBUG(pthread_getschedparam),
+    HOOK_DIRECT_NO_DEBUG(pthread_setschedparam),
+    HOOK_INDIRECT(pthread_mutex_init),
+    HOOK_INDIRECT(pthread_mutex_destroy),
+    HOOK_INDIRECT(pthread_mutex_lock),
+    HOOK_INDIRECT(pthread_mutex_unlock),
+    HOOK_INDIRECT(pthread_mutex_trylock),
+    HOOK_INDIRECT(pthread_mutex_lock_timeout_np),
+    HOOK_INDIRECT(pthread_mutex_timedlock),
+    HOOK_DIRECT_NO_DEBUG(pthread_mutexattr_init),
+    HOOK_DIRECT_NO_DEBUG(pthread_mutexattr_destroy),
+    HOOK_DIRECT_NO_DEBUG(pthread_mutexattr_gettype),
+    HOOK_DIRECT_NO_DEBUG(pthread_mutexattr_settype),
+    HOOK_DIRECT_NO_DEBUG(pthread_mutexattr_getpshared),
+    HOOK_DIRECT(pthread_mutexattr_setpshared),
+    HOOK_DIRECT_NO_DEBUG(pthread_condattr_init),
+    HOOK_DIRECT_NO_DEBUG(pthread_condattr_getpshared),
+    HOOK_DIRECT_NO_DEBUG(pthread_condattr_setpshared),
+    HOOK_DIRECT_NO_DEBUG(pthread_condattr_destroy),
+    HOOK_DIRECT_NO_DEBUG(pthread_condattr_getclock),
+    HOOK_DIRECT_NO_DEBUG(pthread_condattr_setclock),
+    HOOK_INDIRECT(pthread_cond_init),
+    HOOK_INDIRECT(pthread_cond_destroy),
+    HOOK_INDIRECT(pthread_cond_broadcast),
+    HOOK_INDIRECT(pthread_cond_signal),
+    HOOK_INDIRECT(pthread_cond_wait),
+    HOOK_INDIRECT(pthread_cond_timedwait),
+    HOOK_TO(pthread_cond_timedwait_monotonic, _hybris_hook_pthread_cond_timedwait),
+    HOOK_TO(pthread_cond_timedwait_monotonic_np, _hybris_hook_pthread_cond_timedwait),
+    HOOK_INDIRECT(pthread_cond_timedwait_relative_np),
+    HOOK_DIRECT_NO_DEBUG(pthread_key_delete),
+    HOOK_INDIRECT(pthread_setname_np),
+    HOOK_DIRECT_NO_DEBUG(pthread_once),
+    HOOK_DIRECT_NO_DEBUG(pthread_key_create),
+    HOOK_DIRECT(pthread_setspecific),
+    HOOK_INDIRECT(pthread_getspecific),
+    HOOK_INDIRECT(pthread_attr_init),
+    HOOK_INDIRECT(pthread_attr_destroy),
+    HOOK_INDIRECT(pthread_attr_setdetachstate),
+    HOOK_INDIRECT(pthread_attr_getdetachstate),
+    HOOK_INDIRECT(pthread_attr_setschedpolicy),
+    HOOK_INDIRECT(pthread_attr_getschedpolicy),
+    HOOK_INDIRECT(pthread_attr_setschedparam),
+    HOOK_INDIRECT(pthread_attr_getschedparam),
+    HOOK_INDIRECT(pthread_attr_setstacksize),
+    HOOK_INDIRECT(pthread_attr_getstacksize),
+    HOOK_INDIRECT(pthread_attr_setstackaddr),
+    HOOK_INDIRECT(pthread_attr_getstackaddr),
+    HOOK_INDIRECT(pthread_attr_setstack),
+    HOOK_INDIRECT(pthread_attr_getstack),
+    HOOK_INDIRECT(pthread_attr_setguardsize),
+    HOOK_INDIRECT(pthread_attr_getguardsize),
+    HOOK_INDIRECT(pthread_attr_setscope),
+    HOOK_INDIRECT(pthread_attr_getscope),
+    HOOK_INDIRECT(pthread_getattr_np),
+    HOOK_INDIRECT(pthread_rwlockattr_init),
+    HOOK_INDIRECT(pthread_rwlockattr_destroy),
+    HOOK_INDIRECT(pthread_rwlockattr_setpshared),
+    HOOK_INDIRECT(pthread_rwlockattr_getpshared),
+    HOOK_INDIRECT(pthread_rwlock_init),
+    HOOK_INDIRECT(pthread_rwlock_destroy),
+    HOOK_INDIRECT(pthread_rwlock_unlock),
+    HOOK_INDIRECT(pthread_rwlock_wrlock),
+    HOOK_INDIRECT(pthread_rwlock_rdlock),
+    HOOK_INDIRECT(pthread_rwlock_tryrdlock),
+    HOOK_INDIRECT(pthread_rwlock_trywrlock),
+    HOOK_INDIRECT(pthread_rwlock_timedrdlock),
+    HOOK_INDIRECT(pthread_rwlock_timedwrlock),
     /* bionic-only pthread */
-    {"__pthread_gettid", _hybris_hook_pthread_gettid},
-    {"pthread_gettid_np", _hybris_hook_pthread_gettid},
+    HOOK_TO(__pthread_gettid, _hybris_hook_pthread_gettid_np),
+    HOOK_INDIRECT(pthread_gettid_np),
     /* stdio.h */
-    {"__isthreaded", &___hybris_hook_isthreaded},
-    {"__sF", &_hybris_hook_sF},
-    {"fopen", fopen},
-    {"fdopen", fdopen},
-    {"popen", popen},
-    {"puts", puts},
-    {"sprintf", sprintf},
-    {"asprintf", asprintf},
-    {"vasprintf", vasprintf},
-    {"snprintf", snprintf},
-    {"vsprintf", vsprintf},
-    {"vsnprintf", vsnprintf},
-    {"clearerr", _hybris_hook_clearerr},
-    {"fclose", _hybris_hook_fclose},
-    {"feof", _hybris_hook_feof},
-    {"ferror", _hybris_hook_ferror},
-    {"fflush", _hybris_hook_fflush},
-    {"fgetc", _hybris_hook_fgetc},
-    {"fgetpos", _hybris_hook_fgetpos},
-    {"fgets", _hybris_hook_fgets},
-    {"fprintf", _hybris_hook_fprintf},
-    {"fputc", _hybris_hook_fputc},
-    {"fputs", _hybris_hook_fputs},
-    {"fread", _hybris_hook_fread},
-    {"freopen", _hybris_hook_freopen},
-    {"fscanf", _hybris_hook_fscanf},
-    {"fseek", _hybris_hook_fseek},
-    {"fseeko", _hybris_hook_fseeko},
-    {"fsetpos", _hybris_hook_fsetpos},
-    {"ftell", _hybris_hook_ftell},
-    {"ftello", _hybris_hook_ftello},
-    {"fwrite", _hybris_hook_fwrite},
-    {"getc", _hybris_hook_getc},
-    {"getdelim", _hybris_hook_getdelim},
-    {"getline", _hybris_hook_getline},
-    {"putc", _hybris_hook_putc},
-    {"rewind", _hybris_hook_rewind},
-    {"setbuf", _hybris_hook_setbuf},
-    {"setvbuf", _hybris_hook_setvbuf},
-    {"ungetc", _hybris_hook_ungetc},
-    {"vasprintf", vasprintf},
-    {"vfprintf", _hybris_hook_vfprintf},
-    {"vfscanf", _hybris_hook_vfscanf},
-    {"fileno", _hybris_hook_fileno},
-    {"pclose", _hybris_hook_pclose},
-    {"flockfile", _hybris_hook_flockfile},
-    {"ftrylockfile", _hybris_hook_ftrylockfile},
-    {"funlockfile", _hybris_hook_funlockfile},
-    {"getc_unlocked", _hybris_hook_getc_unlocked},
-    {"putc_unlocked", _hybris_hook_putc_unlocked},
-    //{"fgetln", _hybris_hook_fgetln},
-    {"fpurge", _hybris_hook_fpurge},
-    {"getw", _hybris_hook_getw},
-    {"putw", _hybris_hook_putw},
-    {"setbuffer", _hybris_hook_setbuffer},
-    {"setlinebuf", _hybris_hook_setlinebuf},
-    {"__errno", __errno_location},
-    {"__set_errno", _hybris_hook_set_errno},
+    HOOK_TO(__isthreaded, &_hybris_hook___isthreaded),
+    HOOK_TO(__sF, _hybris_hook_sF),
+    HOOK_DIRECT_NO_DEBUG(fopen),
+    HOOK_DIRECT_NO_DEBUG(fdopen),
+    HOOK_DIRECT_NO_DEBUG(popen),
+    HOOK_DIRECT_NO_DEBUG(puts),
+    HOOK_DIRECT_NO_DEBUG(sprintf),
+    HOOK_DIRECT_NO_DEBUG(asprintf),
+    HOOK_DIRECT_NO_DEBUG(vasprintf),
+    HOOK_DIRECT_NO_DEBUG(snprintf),
+    HOOK_DIRECT_NO_DEBUG(vsprintf),
+    HOOK_DIRECT_NO_DEBUG(vsnprintf),
+    HOOK_INDIRECT(clearerr),
+    HOOK_INDIRECT(fclose),
+    HOOK_INDIRECT(feof),
+    HOOK_INDIRECT(ferror),
+    HOOK_INDIRECT(fflush),
+    HOOK_INDIRECT(fgetc),
+    HOOK_INDIRECT(fgetpos),
+    HOOK_INDIRECT(fgets),
+    HOOK_INDIRECT(fprintf),
+    HOOK_INDIRECT(fputc),
+    HOOK_INDIRECT(fputs),
+    HOOK_INDIRECT(fread),
+    HOOK_INDIRECT(freopen),
+    HOOK_INDIRECT(fscanf),
+    HOOK_INDIRECT(fseek),
+    HOOK_INDIRECT(fseeko),
+    HOOK_INDIRECT(fsetpos),
+    HOOK_INDIRECT(ftell),
+    HOOK_INDIRECT(ftello),
+    HOOK_INDIRECT(fwrite),
+    HOOK_INDIRECT(getc),
+    HOOK_INDIRECT(getdelim),
+    HOOK_INDIRECT(getline),
+    HOOK_INDIRECT(putc),
+    HOOK_INDIRECT(rewind),
+    HOOK_INDIRECT(setbuf),
+    HOOK_INDIRECT(setvbuf),
+    HOOK_INDIRECT(ungetc),
+    HOOK_INDIRECT(vfprintf),
+    HOOK_INDIRECT(vfscanf),
+    HOOK_INDIRECT(fileno),
+    HOOK_INDIRECT(pclose),
+    HOOK_INDIRECT(flockfile),
+    HOOK_INDIRECT(ftrylockfile),
+    HOOK_INDIRECT(funlockfile),
+    HOOK_INDIRECT(getc_unlocked),
+    HOOK_INDIRECT(putc_unlocked),
+    //HOOK(fgetln),
+    HOOK_INDIRECT(fpurge),
+    HOOK_INDIRECT(getw),
+    HOOK_INDIRECT(putw),
+    HOOK_INDIRECT(setbuffer),
+    HOOK_INDIRECT(setlinebuf),
+    HOOK_TO(__errno, __errno_location),
+    HOOK_INDIRECT(__set_errno),
+    HOOK_TO(__progname, &program_invocation_name),
     /* net specifics, to avoid __res_get_state */
-    {"getaddrinfo", _hybris_hook_getaddrinfo},
-    {"freeaddrinfo", _hybris_hook_freeaddrinfo},
-    {"gethostbyaddr", gethostbyaddr},
-    {"gethostbyname", gethostbyname},
-    {"gethostbyname2", gethostbyname2},
-    {"gethostent", gethostent},
-    {"strftime", strftime},
-    {"sysconf", _hybris_hook_sysconf},
-    {"dlopen", _hybris_hook_android_dlopen},
-    {"dlerror", _hybris_hook_android_dlerror},
-    {"dlsym", _hybris_hook_android_dlsym},
-    {"dladdr", _hybris_hook_android_dladdr},
-    {"dlclose", _hybris_hook_android_dlclose},
+    HOOK_INDIRECT(getaddrinfo),
+    HOOK_INDIRECT(freeaddrinfo),
+    HOOK_DIRECT_NO_DEBUG(gethostbyaddr),
+    HOOK_DIRECT_NO_DEBUG(gethostbyname),
+    HOOK_DIRECT_NO_DEBUG(gethostbyname2),
+    HOOK_DIRECT_NO_DEBUG(gethostent),
+    HOOK_DIRECT_NO_DEBUG(strftime),
+    HOOK_INDIRECT(sysconf),
+    HOOK_INDIRECT(dlopen),
+    HOOK_INDIRECT(dlerror),
+    HOOK_INDIRECT(dlsym),
+    HOOK_INDIRECT(dlvsym),
+    HOOK_INDIRECT(dladdr),
+    HOOK_INDIRECT(dlclose),
     /* dirent.h */
-    {"opendir", opendir},
-    {"fdopendir", fdopendir},
-    {"closedir", closedir},
-    {"readdir", _hybris_hook_readdir},
-    {"readdir_r", _hybris_hook_readdir_r},
-    {"rewinddir", rewinddir},
-    {"seekdir", seekdir},
-    {"telldir", telldir},
-    {"dirfd", dirfd},
+    HOOK_DIRECT_NO_DEBUG(opendir),
+    HOOK_DIRECT_NO_DEBUG(fdopendir),
+    HOOK_DIRECT_NO_DEBUG(closedir),
+    HOOK_INDIRECT(readdir),
+    HOOK_INDIRECT(readdir_r),
+    HOOK_DIRECT_NO_DEBUG(rewinddir),
+    HOOK_DIRECT_NO_DEBUG(seekdir),
+    HOOK_DIRECT_NO_DEBUG(telldir),
+    HOOK_DIRECT_NO_DEBUG(dirfd),
+    HOOK_INDIRECT(scandir),
+    HOOK_INDIRECT(scandirat),
+    HOOK_INDIRECT(alphasort),
+    HOOK_INDIRECT(versionsort),
     /* fcntl.h */
-    {"open", _hybris_hook_open},
+    HOOK_INDIRECT(open),
     // TODO: scandir, scandirat, alphasort, versionsort
-    {"__get_tls_hooks", _hybris_hook_get_tls_hooks},
-    {"sscanf", sscanf},
-    {"scanf", scanf},
-    {"vscanf", vscanf},
-    {"vsscanf", vsscanf},
-    {"openlog", openlog},
-    {"syslog", syslog},
-    {"closelog", closelog},
-    {"vsyslog", vsyslog},
-    {"timer_create", timer_create},
-    {"timer_settime", timer_settime},
-    {"timer_gettime", timer_gettime},
-    {"timer_delete", timer_delete},
-    {"timer_getoverrun", timer_getoverrun},
-    {"localtime", localtime},
-    {"localtime_r", localtime_r},
-    {"gmtime", gmtime},
-    {"abort", abort},
-    {"writev", writev},
+    HOOK_INDIRECT(__get_tls_hooks),
+    HOOK_DIRECT_NO_DEBUG(sscanf),
+    HOOK_DIRECT_NO_DEBUG(scanf),
+    HOOK_DIRECT_NO_DEBUG(vscanf),
+    HOOK_DIRECT_NO_DEBUG(vsscanf),
+    HOOK_DIRECT_NO_DEBUG(openlog),
+    HOOK_DIRECT_NO_DEBUG(syslog),
+    HOOK_DIRECT_NO_DEBUG(closelog),
+    HOOK_DIRECT_NO_DEBUG(vsyslog),
+    HOOK_DIRECT_NO_DEBUG(timer_create),
+    HOOK_DIRECT_NO_DEBUG(timer_settime),
+    HOOK_DIRECT_NO_DEBUG(timer_gettime),
+    HOOK_DIRECT_NO_DEBUG(timer_delete),
+    HOOK_DIRECT_NO_DEBUG(timer_getoverrun),
+    HOOK_DIRECT_NO_DEBUG(localtime),
+    HOOK_DIRECT_NO_DEBUG(localtime_r),
+    HOOK_DIRECT_NO_DEBUG(gmtime),
+    HOOK_DIRECT_NO_DEBUG(abort),
+    HOOK_DIRECT_NO_DEBUG(writev),
     /* unistd.h */
-    {"access", access},
+    HOOK_DIRECT_NO_DEBUG(access),
     /* grp.h */
-    {"getgrgid", getgrgid},
-    {"__cxa_atexit", __cxa_atexit},
-    {"__cxa_finalize", __cxa_finalize},
-    {"__system_property_read", ___hybris_hook_system_property_read},
-    {"__system_property_set", property_set},
-    {"__system_property_foreach", ___hybris_hook_system_property_foreach},
-    {"__system_property_find", ___hybris_hook_system_property_find},
-    {"__system_property_serial", ___hybris_hook_system_property_serial},
-    {"__system_property_wait", ___hybris_hook_system_property_wait},
-    {"__system_property_update", ___hybris_hook_system_property_update},
-    {"__system_property_add", ___hybris_hook_system_property_add},
-    {"__system_property_wait_any", ___hybris_hook_system_property_wait_any},
-    {"__system_property_find_nth", ___hybris_hook_system_property_find_nth},
+    HOOK_DIRECT_NO_DEBUG(getgrgid),
+    HOOK_DIRECT_NO_DEBUG(__cxa_atexit),
+    HOOK_DIRECT_NO_DEBUG(__cxa_finalize),
+    HOOK_INDIRECT(__system_property_read),
+    HOOK_TO(__system_property_set, _hybris_hook_property_set),
+    HOOK_INDIRECT(__system_property_foreach),
+    HOOK_INDIRECT(__system_property_find),
+    HOOK_INDIRECT(__system_property_serial),
+    HOOK_INDIRECT(__system_property_wait),
+    HOOK_INDIRECT(__system_property_update),
+    HOOK_INDIRECT(__system_property_add),
+    HOOK_INDIRECT(__system_property_wait_any),
+    HOOK_INDIRECT(__system_property_find_nth),
     /* sys/prctl.h */
-    {"prctl", _hybris_hook_prctl},
+    HOOK_INDIRECT(prctl),
 };
 
 static struct _hook hooks_mm[] = {
-    {"strtol", _hybris_hook_strtol},
-    {"strlcat",strlcat},
-    {"strlcpy",strlcpy},
-    {"setenv", _hybris_hook_setenv},
-    {"putenv", _hybris_hook_putenv},
-    {"clearenv", _hybris_hook_clearenv},
-    {"dprintf", dprintf},
-    {"mallinfo", mallinfo},
-    {"malloc_usable_size", _hybris_hook_malloc_usable_size},
-    {"posix_memalign", _hybris_hook_posix_memalign},
-    {"mprotect", _hybris_hook_mprotect},
-    {"__memcpy_chk", __memcpy_chk},
-    {"__memset_chk", __memset_chk},
-    {"__gnu_strerror_r",_hybris_hook__gnu_strerror_r},
-    {"__strncpy_chk",__strncpy_chk},
-    {"pthread_rwlockattr_getkind_np", _hybris_hook_pthread_rwlockattr_getkind_np},
-    {"pthread_rwlockattr_setkind_np", _hybris_hook_pthread_rwlockattr_setkind_np},
+    HOOK_DIRECT(strtol),
+    HOOK_DIRECT_NO_DEBUG(strlcat),
+    HOOK_DIRECT_NO_DEBUG(strlcpy),
+    HOOK_DIRECT(setenv),
+    HOOK_DIRECT(putenv),
+    HOOK_DIRECT(clearenv),
+    HOOK_DIRECT_NO_DEBUG(dprintf),
+    HOOK_DIRECT_NO_DEBUG(mallinfo),
+    HOOK_DIRECT(malloc_usable_size),
+    HOOK_DIRECT(posix_memalign),
+    HOOK_DIRECT(mprotect),
+    HOOK_TO(__gnu_strerror_r, _hybris_hook__gnu_strerror_r),
+    HOOK_INDIRECT(pthread_rwlockattr_getkind_np),
+    HOOK_INDIRECT(pthread_rwlockattr_setkind_np),
     /* unistd.h */
-    {"fork", _hybris_hook_fork},
-    {"ttyname", ttyname},
-    {"swprintf", swprintf},
-    {"fmemopen", fmemopen},
-    {"open_memstream", open_memstream},
-    {"open_wmemstream", open_wmemstream},
-    {"ptsname", ptsname},
-    {"__hybris_set_errno_internal", _hybris_hook_set_errno},
-    {"getservbyname", getservbyname},
-    {"scandir", scandir},
-    {"scandir64", scandir64},
+    HOOK_DIRECT(fork),
+    HOOK_DIRECT_NO_DEBUG(ttyname),
+    HOOK_DIRECT_NO_DEBUG(swprintf),
+    HOOK_DIRECT_NO_DEBUG(fmemopen),
+    HOOK_DIRECT_NO_DEBUG(open_memstream),
+    HOOK_DIRECT_NO_DEBUG(open_wmemstream),
+    HOOK_DIRECT_NO_DEBUG(ptsname),
+    HOOK_TO(__hybris_set_errno_internal, _hybris_hook___set_errno),
+    HOOK_DIRECT_NO_DEBUG(getservbyname),
     /* libgen.h */
-    {"basename", _hybris_hook_basename},
-    {"dirname", _hybris_hook_dirname},
+    HOOK_INDIRECT(basename),
+    HOOK_INDIRECT(dirname),
     /* locale.h */
-    {"newlocale", _hybris_hook_newlocale},
-    {"freelocale", _hybris_hook_freelocale},
-    {"duplocale", _hybris_hook_duplocale},
-    {"uselocale", _hybris_hook_uselocale},
-    {"localeconv", _hybris_hook_localeconv},
-    {"setlocale", _hybris_hook_setlocale},
+    HOOK_DIRECT(newlocale),
+    HOOK_DIRECT(freelocale),
+    HOOK_DIRECT(duplocale),
+    HOOK_DIRECT(uselocale),
+    HOOK_DIRECT(localeconv),
+    HOOK_DIRECT(setlocale),
     /* sys/mman.h */
-    {"mmap", _hybris_hook_mmap},
-    {"munmap", _hybris_hook_munmap},
+    HOOK_DIRECT(mmap),
+    HOOK_DIRECT(munmap),
     /* wchar.h */
-    {"wmemchr", wmemchr},
-    {"wmemcmp", wmemcmp},
-    {"wmemcpy", wmemcpy},
-    {"wmemmove", wmemmove},
-    {"wmemset", wmemset},
-    {"wmempcpy", wmempcpy},
-    {"fputws", _hybris_hook_fputws},
+    HOOK_DIRECT_NO_DEBUG(wmemchr),
+    HOOK_DIRECT_NO_DEBUG(wmemcmp),
+    HOOK_DIRECT_NO_DEBUG(wmemcpy),
+    HOOK_DIRECT_NO_DEBUG(wmemmove),
+    HOOK_DIRECT_NO_DEBUG(wmemset),
+    HOOK_DIRECT_NO_DEBUG(wmempcpy),
+    HOOK_INDIRECT(fputws),
     // It's enough to hook vfwprintf here as fwprintf will call it with a
     // proper va_list in place so we don't have to handle this here.
-    {"vfwprintf", _hybris_hook_vfwprintf},
-    {"fputwc", _hybris_hook_fputwc},
-    {"putwc", _hybris_hook_putwc},
-    {"fgetwc", _hybris_hook_fgetwc},
-    {"getwc", _hybris_hook_getwc},
+    HOOK_INDIRECT(vfwprintf),
+    HOOK_INDIRECT(fputwc),
+    HOOK_INDIRECT(putwc),
+    HOOK_INDIRECT(fgetwc),
+    HOOK_INDIRECT(getwc),
     /* sched.h */
-    {"clone", clone},
+    HOOK_DIRECT_NO_DEBUG(clone),
     /* mntent.h */
-    {"setmntent", _hybris_hook_setmntent},
-    {"getmntent", _hybris_hook_getmntent},
-    {"getmntent_r", _hybris_hook_getmntent_r},
-    {"endmntent", _hybris_hook_endmntent},
+    HOOK_DIRECT(setmntent),
+    HOOK_INDIRECT(getmntent),
+    HOOK_INDIRECT(getmntent_r),
+    HOOK_INDIRECT(endmntent),
     /* stdlib.h */
-    {"system", system},
+    HOOK_DIRECT_NO_DEBUG(system),
     /* pwd.h */
-    {"getgrnam", getgrnam},
-    {"getpwuid", getpwuid},
-    {"getpwnam", getpwnam},
+    HOOK_DIRECT_NO_DEBUG(getpwuid),
+    HOOK_DIRECT_NO_DEBUG(getpwnam),
     /* signal.h */
     /* Hooks commented out for the moment as we need proper translations between
      * bionic and glibc types for them to work (for instance, sigset_t has
      * different definitions in each library).
      */
 #if 0
-    {"sigaction", sigaction},
-    {"sigaddset", sigaddset},
-    {"sigaltstack", sigaltstack},
-    {"sigblock", sigblock},
-    {"sigdelset", sigdelset},
-    {"sigemptyset", sigemptyset},
-    {"sigfillset", sigfillset},
-    {"siginterrupt", siginterrupt},
-    {"sigismember", sigismember},
-    {"siglongjmp", siglongjmp},
-    {"signal", signal},
-    {"signalfd", signalfd},
-    {"sigpending", sigpending},
-    {"sigprocmask", sigprocmask},
-    {"sigqueue", sigqueue},
+    HOOK_INDIRECT(sigaction),
+    HOOK_INDIRECT(sigaddset),
+    HOOK_INDIRECT(sigaltstack),
+    HOOK_INDIRECT(sigblock),
+    HOOK_INDIRECT(sigdelset),
+    HOOK_INDIRECT(sigemptyset),
+    HOOK_INDIRECT(sigfillset),
+    HOOK_INDIRECT(siginterrupt),
+    HOOK_INDIRECT(sigismember),
+    HOOK_INDIRECT(siglongjmp),
+    HOOK_INDIRECT(signal),
+    HOOK_INDIRECT(signalfd),
+    HOOK_INDIRECT(sigpending),
+    HOOK_INDIRECT(sigprocmask),
+    HOOK_INDIRECT(sigqueue),
     // setjmp.h defines segsetjmp via a #define and the real symbol
     // we have to forward to is __sigsetjmp
     {"sigsetjmp", __sigsetjmp},
-    {"sigsetmask", sigsetmask},
-    {"sigsuspend", sigsuspend},
-    {"sigtimedwait", sigtimedwait},
-    {"sigwait", sigwait},
-    {"sigwaitinfo", sigwaitinfo},
+    HOOK_INDIRECT(sigsetmask),
+    HOOK_INDIRECT(sigsuspend),
+    HOOK_INDIRECT(sigtimedwait),
+    HOOK_INDIRECT(sigwait),
+    HOOK_INDIRECT(sigwaitinfo),
 #endif
     /* dirent.h */
-    {"scandir", _hybris_hook_scandir},
-    {"scandirat", _hybris_hook_scandirat},
-    {"alphasort,", _hybris_hook_alphasort},
-    {"versionsort,", _hybris_hook_versionsort},
-    {"scandir64", scandir},
+    HOOK_TO(readdir64, _hybris_hook_readdir),
+    HOOK_TO(readdir64_r, _hybris_hook_readdir_r),
+    HOOK_INDIRECT(scandir),
+    HOOK_INDIRECT(scandirat),
+    HOOK_TO(scandir64, _hybris_hook_scandir),
 };
 
 
@@ -2758,13 +2898,24 @@ static void* __hybris_get_hooked_symbol(const char *sym, const char *requester)
 
     /* Allow newer hooks to override those which are available for all versions */
     key.name = sym;
+#if defined(WANT_LINKER_N)
     if (get_android_sdk_version() > 21)
         found = bsearch(&key, hooks_mm, HOOKS_SIZE(hooks_mm), sizeof(hooks_mm[0]), hook_cmp);
+#endif
+#if defined(WANT_LINKER_MM)
+    if (get_android_sdk_version() > 21)
+        found = bsearch(&key, hooks_mm, HOOKS_SIZE(hooks_mm), sizeof(hooks_mm[0]), hook_cmp);
+#endif
     if (!found)
         found = bsearch(&key, hooks_common, HOOKS_SIZE(hooks_common), sizeof(hooks_common[0]), hook_cmp);
 
     if (found)
-        return ((struct _hook*) found)->func;
+    {
+        if(hybris_should_trace(NULL, NULL))
+            return ((struct _hook*) found)->debug_func;
+        else
+            return ((struct _hook*) found)->func;
+    }
 
     if (strncmp(sym, "pthread", 7) == 0 ||
         strncmp(sym, "__pthread", 9) == 0)
@@ -2802,11 +2953,16 @@ static void* __hybris_load_linker(const char *path)
 
 #define LINKER_NAME_JB "jb"
 #define LINKER_NAME_MM "mm"
+#define LINKER_NAME_N "n"
 
-#if defined(WANT_LINKER_JB)
-#define LINKER_NAME_DEFAULT LINKER_NAME_JB
+// These should be in order, such that we don't use for example the jellybean
+// linker for sdk_version > 25 (see __hybris_linker_init below).
+#if defined(WANT_LINKER_N)
+#define LINKER_NAME_DEFAULT LINKER_NAME_N
 #elif defined(WANT_LINKER_MM)
 #define LINKER_NAME_DEFAULT LINKER_NAME_MM
+#elif defined(WANT_LINKER_JB)
+#define LINKER_NAME_DEFAULT LINKER_NAME_JB
 #endif
 
 static int linker_initialized = 0;
@@ -2823,6 +2979,10 @@ static void __hybris_linker_init()
     /* See https://source.android.com/source/build-numbers.html for
      * an overview over available SDK version numbers and which
      * Android version they relate to. */
+#if defined(WANT_LINKER_N)
+    if (sdk_version <= 25)
+        name = LINKER_NAME_N;
+#endif
 #if defined(WANT_LINKER_MM)
     if (sdk_version <= 23)
         name = LINKER_NAME_MM;
@@ -2849,12 +3009,17 @@ static void __hybris_linker_init()
     _android_linker_init = dlsym(linker_handle, "android_linker_init");
     _android_dlopen = dlsym(linker_handle, "android_dlopen");
     _android_dlsym = dlsym(linker_handle, "android_dlsym");
+    _android_dlvsym = dlsym(linker_handle, "android_dlvsym");
     _android_dladdr = dlsym(linker_handle, "android_dladdr");
     _android_dlclose = dlsym(linker_handle, "android_dlclose");
     _android_dlerror = dlsym(linker_handle, "android_dlerror");
 
     /* Now its time to setup the linker itself */
+#ifdef WANT_ARM_TRACING
+    _android_linker_init(sdk_version, __hybris_get_hooked_symbol, create_wrapper);
+#else
     _android_linker_init(sdk_version, __hybris_get_hooked_symbol);
+#endif
 
     linker_initialized = 1;
 }
@@ -2885,6 +3050,16 @@ void *android_dlsym(void *handle, const char *symbol)
         return NULL;
 
     return _android_dlsym(handle,symbol);
+}
+
+void *android_dlvsym(void *handle, const char *symbol, const char* version)
+{
+    ENSURE_LINKER_IS_LOADED();
+
+    if (!_android_dlvsym)
+        return NULL;
+
+    return _android_dlvsym(handle,symbol, version);
 }
 
 int android_dlclose(void *handle)

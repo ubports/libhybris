@@ -25,7 +25,7 @@
 HYBRIS_LIBRARY_INITIALIZE(hardware, "libhardware.so");
 #pragma GCC visibility pop
 
-HYBRIS_IMPLEMENT_FUNCTION2(hardware, int, hw_get_module, const char *, const struct hw_module_t **);
-HYBRIS_IMPLEMENT_FUNCTION3(hardware, int, hw_get_module_by_class, const char *, const char *, const struct hw_module_t **);
+HYBRIS_IMPLEMENT_FUNCTION_CHECKED2(hardware, int, hw_get_module, const char *, const struct hw_module_t **);
+HYBRIS_IMPLEMENT_FUNCTION_CHECKED3(hardware, int, hw_get_module_by_class, const char *, const char *, const struct hw_module_t **);
 
 // vim:ts=4:sw=4:noexpandtab

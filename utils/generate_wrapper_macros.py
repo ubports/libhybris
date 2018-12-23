@@ -97,6 +97,16 @@ print """
         *(fptr) = (void *) android_dlsym(name##_handle, sym); \\
     }
 
+#define HYBRIS_DLSYSM_CHECKED(name, fptr, sym) \\
+    if (!name##_handle) \\
+        hybris_##name##_initialize(); \\
+    if (!name##_handle) \\
+        return -EINVAL; \\
+    if (*(fptr) == NULL) \\
+    { \\
+        *(fptr) = (void *) android_dlsym(name##_handle, sym); \\
+    }
+
 #define HYBRIS_LIBRARY_INITIALIZE(name, path) \\
     void *name##_handle; \\
     void hybris_##name##_initialize() \\
@@ -121,6 +131,16 @@ for count in range(MAX_ARGS):
     call_names = ', '.join(names)
 
     print """
+#define HYBRIS_IMPLEMENT_FUNCTION_CHECKED{count}({wrapper_signature}) \\
+    return_type symbol({signature_with_names}) \\
+    {BEGIN} \\
+        static return_type (*f)({signature}) FP_ATTRIB = NULL; \\
+        HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \\
+        if (!f) \\
+            return -EINVAL; \\
+        return f({call_names}); \\
+    {END}
+
 #define HYBRIS_IMPLEMENT_FUNCTION{count}({wrapper_signature}) \\
     return_type symbol({signature_with_names}) \\
     {BEGIN} \\

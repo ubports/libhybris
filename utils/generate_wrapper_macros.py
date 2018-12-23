@@ -137,7 +137,7 @@ for count in range(MAX_ARGS):
         static return_type (*f)({signature}) FP_ATTRIB = NULL; \\
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \\
         if (!f) \\
-            retun -EINVAL; \\
+            return -EINVAL; \\
         return f({call_names}); \\
     {END}
 

@@ -88,7 +88,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)() FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(); \
     }
 
@@ -107,7 +107,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1); \
     }
 
@@ -126,7 +126,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2); \
     }
 
@@ -145,7 +145,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3); \
     }
 
@@ -164,7 +164,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4); \
     }
 
@@ -183,7 +183,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5); \
     }
 
@@ -202,7 +202,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5, a6) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5, n6); \
     }
 
@@ -221,7 +221,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5, a6, a7) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5, n6, n7); \
     }
 
@@ -240,7 +240,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5, a6, a7, a8) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5, n6, n7, n8); \
     }
 
@@ -259,7 +259,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5, a6, a7, a8, a9) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5, n6, n7, n8, n9); \
     }
 
@@ -278,7 +278,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5, n6, n7, n8, n9, n10); \
     }
 
@@ -297,7 +297,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11); \
     }
 
@@ -316,7 +316,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12); \
     }
 
@@ -335,7 +335,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13); \
     }
 
@@ -354,7 +354,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13, n14); \
     }
 
@@ -373,7 +373,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13, n14, n15); \
     }
 
@@ -392,7 +392,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13, n14, n15, n16); \
     }
 
@@ -411,7 +411,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13, n14, n15, n16, n17); \
     }
 
@@ -430,7 +430,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13, n14, n15, n16, n17, n18); \
     }
 
@@ -449,7 +449,7 @@ int android_dladdr(const void *addr, void *info);
         static return_type (*f)(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19) FP_ATTRIB = NULL; \
         HYBRIS_DLSYSM_CHECKED(name, &f, #symbol); \
         if (!f) \
-            retun -EINVAL; \
+            return -EINVAL; \
         return f(n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13, n14, n15, n16, n17, n18, n19); \
     }
 

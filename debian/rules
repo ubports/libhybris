@@ -52,16 +52,6 @@ alt_ld_so_conf_file     := alt_ld.so.conf
 ld_so_conf_path         := $(ld_so_conf_dir)/$(ld_so_conf_file)
 alt_ld_so_conf_path     := $(ld_so_conf_dir)/$(alt_ld_so_conf_file)
 
-.PHONY: debian/control
-debian/control: debian/control.in
-	if [ "$(EXTRA_BUILD_DEPENDS)" = "" ] ; then \
-		sed -e '/@EXTRA_BUILD_DEPENDS@/,+0d' \
-			debian/control.in > debian/control ; \
-	else \
-		sed -e "s/@EXTRA_BUILD_DEPENDS@/$(EXTRA_BUILD_DEPENDS)/" \
-			debian/control.in > debian/control ; \
-	fi
-
 override_dh_auto_clean: debian/control
 	dh_auto_clean
 

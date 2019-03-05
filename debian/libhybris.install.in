@@ -1,5 +1,7 @@
 usr/lib/*/libhybris-eglplatformcommon.so.*
 usr/lib/*/libhybris-hwcomposerwindow.so.*
+usr/lib/*/libgralloc.so.*
+usr/lib/*/libhwc2.so.*
 usr/lib/*/libsync.so.*
 usr/lib/*/libui.so.*
 usr/lib/*/libsf.so.*

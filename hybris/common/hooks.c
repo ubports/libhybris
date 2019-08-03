@@ -65,6 +65,7 @@
 #include <sys/syscall.h>
 #include <sys/auxv.h>
 #include <sys/prctl.h>
+#include <sys/uio.h>
 
 #include <sys/mman.h>
 #include <libgen.h>
@@ -93,9 +94,9 @@ static int locale_inited = 0;
 static hybris_hook_cb hook_callback = NULL;
 
 #ifdef WANT_ARM_TRACING
-static void (*_android_linker_init)(int sdk_version, void* (*get_hooked_symbol)(const char*, const char*), void *(_create_wrapper)(const char*, void*, int)) = NULL;
+static void (*_android_linker_init)(int sdk_version, void* (*get_hooked_symbol)(const char*, const char*), int enable_linker_gdb_support, void *(_create_wrapper)(const char*, void*, int)) = NULL;
 #else
-static void (*_android_linker_init)(int sdk_version, void* (*get_hooked_symbol)(const char*, const char*)) = NULL;
+static void (*_android_linker_init)(int sdk_version, void* (*get_hooked_symbol)(const char*, const char*), int enable_linker_gdb_support) = NULL;
 #endif
 
 void *(*_android_dlopen)(const char* filename, int flag) = NULL;
@@ -2630,7 +2631,7 @@ static struct _hook hooks_common[] = {
     HOOK_INDIRECT(malloc),
     HOOK_INDIRECT(free),
     HOOK_DIRECT_NO_DEBUG(calloc),
-    HOOK_DIRECT_NO_DEBUG(cfree),
+    HOOK_DIRECT_NO_DEBUG(free),
     HOOK_DIRECT_NO_DEBUG(realloc),
     HOOK_DIRECT_NO_DEBUG(memalign),
     HOOK_DIRECT_NO_DEBUG(valloc),
@@ -3180,6 +3181,14 @@ static int linker_initialized = 0;
 static void __hybris_linker_init()
 {
     LOGD("Linker initialization");
+    
+    int enable_linker_gdb_support = 0;
+    const char *env = getenv("HYBRIS_ENABLE_LINKER_DEBUG_MAP");
+    if (env != NULL) {
+        if (strcmp(env, "1") == 0) {
+            enable_linker_gdb_support = 1;
+        }
+    }
 
     int sdk_version = get_android_sdk_version();
 
@@ -3207,7 +3216,11 @@ static void __hybris_linker_init()
 #endif
 
     const char *linker_dir = LINKER_PLUGIN_DIR;
-    const char *user_linker_dir = getenv("HYBRIS_LINKER_DIR");
+    /* getauxval to make sure users cannot load custom libraries into
+     * setuid processes */
+    const char *user_linker_dir = getauxval(AT_SECURE) ?
+	    NULL :
+	    getenv("HYBRIS_LINKER_DIR");
     if (user_linker_dir)
         linker_dir = user_linker_dir;
 
@@ -3241,9 +3254,9 @@ static void __hybris_linker_init()
 
     /* Now its time to setup the linker itself */
 #ifdef WANT_ARM_TRACING
-    _android_linker_init(sdk_version, __hybris_get_hooked_symbol, create_wrapper);
+    _android_linker_init(sdk_version, __hybris_get_hooked_symbol, enable_linker_gdb_support, create_wrapper);
 #else
-    _android_linker_init(sdk_version, __hybris_get_hooked_symbol);
+    _android_linker_init(sdk_version, __hybris_get_hooked_symbol, enable_linker_gdb_support);
 #endif
 
     if (_android_set_application_target_sdk_version) {

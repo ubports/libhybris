@@ -20,6 +20,7 @@ usr/lib/*/pkgconfig/libsync.pc
 usr/include/hybris/camera
 usr/include/hybris/common
 usr/include/hybris/dlfcn
+usr/include/hybris/gralloc
 usr/include/hybris/eglplatformcommon
 usr/include/hybris/hwc2
 usr/include/hybris/hwcomposerwindow

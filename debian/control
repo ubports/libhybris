@@ -4,7 +4,7 @@ Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
 Build-Depends: debhelper (>= 9.0.0),
                autotools-dev,
                dh-autoreconf,
-               android-headers-27,
+               android-headers-28,
                quilt,
                pkg-config,
                libgles2-mesa-dev,

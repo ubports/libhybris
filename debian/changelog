@@ -1,3 +1,9 @@
+libhybris (0.1.3+ubports2) xenial; urgency=medium
+
+  * Compile with android-28 headers for Halium 9
+
+ -- TheKit <nekit1000@@gmail.com>  Sat, 21 Mar 2020 22:36:24 +0100
+
 libhybris (0.1.3+ubports1) xenial; urgency=medium
 
   * Update to upstream libhybris

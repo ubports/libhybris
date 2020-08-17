@@ -26,25 +26,38 @@ static void process_event(sensors_event_t *data)
 {
     switch (data->type) {
         case SENSOR_TYPE_ACCELEROMETER:
-            printf("Accelerometer: %+08.2f, %+08.2f, %+08.2f", data->acceleration.x,
+            printf("Accelerometer: %+08.2f, %+08.2f, %+08.2f\n", data->acceleration.x,
                     data->acceleration.y, data->acceleration.z);
             break;
         case SENSOR_TYPE_ORIENTATION:
-            printf("Orientation: %+08.2f, %+08.2f, %+08.2f", data->orientation.x,
+            printf("Orientation: %+08.2f, %+08.2f, %+08.2f\n", data->orientation.x,
                     data->orientation.y, data->orientation.z);
             break;
         case SENSOR_TYPE_GYROSCOPE:
-            printf("Gyroscope: %+08.2f, %+08.2f, %+08.2f", data->gyro.x,
+            printf("Gyroscope: %+08.2f, %+08.2f, %+08.2f\n", data->gyro.x,
                     data->gyro.y, data->gyro.z);
             break;
+        case SENSOR_TYPE_MAGNETIC_FIELD:
+            printf("Magnetic field: %+08.2f, %+08.2f, %+08.2f\n", data->magnetic.x,
+                    data->magnetic.y, data->magnetic.z);
+            break;
         case SENSOR_TYPE_LIGHT:
-            printf("Light: %+08.2f", data->light);
+            printf("Light: %+08.2f\n", data->light);
+            break;
+        case SENSOR_TYPE_TEMPERATURE:
+            printf("Temperature: %+08.2f\n", data->temperature);
+            break;
+        case SENSOR_TYPE_PRESSURE:
+            printf("Pressure: %+08.2f\n", data->pressure);
             break;
         case SENSOR_TYPE_PROXIMITY:
-            printf("Proximity: %+08.2f", data->distance);
+            printf("Proximity: %+08.2f\n", data->distance);
+            break;
+        case SENSOR_TYPE_RELATIVE_HUMIDITY:
+            printf("Humidity: %+08.2f\n", data->relative_humidity);
             break;
         default:
-            printf("Other sensor data (not parsed yet, type=%d)", data->type);
+            printf("Other sensor data (not parsed yet, type=%d)\n", data->type);
     }
 }
 
@@ -155,7 +168,7 @@ int main(int argc, char **argv)
                     fflush(stdout);
                     while (dev->poll(dev, &data, 1) != 1);
                     printf(" ");
-                    if (data.sensor == poll_sensor) {
+                    if (data.sensor == s->handle) {
                         process_event(&data);
                     }
                     printf("\33[K");

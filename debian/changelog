@@ -1,3 +1,10 @@
+libhybris (0.1.3+ubports3) xenial; urgency=medium
+
+  * Update to upstream libhybris
+  * Do not ship libwayland-egl as it is not needed with new wayland libs.
+
+ -- TheKit <nekit1000@@gmail.com>  Thu, 27 Aug 2020 10:53:32 +0300
+
 libhybris (0.1.3+ubports2) xenial; urgency=medium
 
   * Compile with android-28 headers for Halium 9

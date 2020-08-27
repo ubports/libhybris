@@ -91,9 +91,6 @@ extern "C" void HWCNativeBufferSetFence(struct ANativeWindowBuffer *buf, int fd)
     static_cast<_BufferFenceAccessor *>(buf)->set(fd);
 }
 
-static pthread_cond_t _cond = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t _mutex = PTHREAD_MUTEX_INITIALIZER;
-
 
 HWComposerNativeWindowBuffer::HWComposerNativeWindowBuffer(unsigned int width,
                             unsigned int height,
@@ -496,7 +493,7 @@ void HWComposerNativeWindow::allocateBuffers()
 
         if (b->status) {
             b->common.decRef(&b->common);
-            fprintf(stderr,"WARNING: %s: allocated only %d buffers out of %d\n", __PRETTY_FUNCTION__, m_bufList.size(), m_bufferCount);
+            fprintf(stderr,"WARNING: %s: allocated only %zu buffers out of %u\n", __PRETTY_FUNCTION__, m_bufList.size(), m_bufferCount);
             break;
         }
 

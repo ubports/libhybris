@@ -45,6 +45,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include "test_common.h"
+
 int shot_counter = 1;
 int32_t current_zoom_level = 1;
 bool new_camera_frame_available = true;
@@ -116,12 +118,12 @@ void autofocus_msg_cb(void* context)
 
 void raw_data_cb(void* data, uint32_t data_size, void* context)
 {
-	printf("%s: %d \n", __PRETTY_FUNCTION__, data_size);
+	printf("%s: %u \n", __PRETTY_FUNCTION__, data_size);
 }
 
 void jpeg_data_cb(void* data, uint32_t data_size, void* context)
 {
-	printf("%s: %d \n", __PRETTY_FUNCTION__, data_size);
+	printf("%s: %u \n", __PRETTY_FUNCTION__, data_size);
 
 	char fn[256];
 	sprintf(fn, "/tmp/shot_%d.jpeg", shot_counter);
@@ -220,77 +222,6 @@ static const char* fragment_shader()
 		"}                                                   \n";
 }
 
-static GLuint loadShader(GLenum shaderType, const char* pSource) {
-	GLuint shader = glCreateShader(shaderType);
-
-	if (shader) {
-		glShaderSource(shader, 1, &pSource, NULL);
-		glCompileShader(shader);
-		GLint compiled = 0;
-		glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
-
-		if (!compiled) {
-			GLint infoLen = 0;
-			glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLen);
-			if (infoLen) {
-				char* buf = (char*) malloc(infoLen);
-				if (buf) {
-					glGetShaderInfoLog(shader, infoLen, NULL, buf);
-					fprintf(stderr, "Could not compile shader %d:\n%s\n",
-							shaderType, buf);
-					free(buf);
-				}
-				glDeleteShader(shader);
-				shader = 0;
-			}
-		}
-	} else {
-		printf("Error, during shader creation: %i\n", glGetError());
-	}
-
-	return shader;
-}
-
-static GLuint create_program(const char* pVertexSource, const char* pFragmentSource) {
-	GLuint vertexShader = loadShader(GL_VERTEX_SHADER, pVertexSource);
-	if (!vertexShader) {
-		printf("vertex shader not compiled\n");
-		return 0;
-	}
-
-	GLuint pixelShader = loadShader(GL_FRAGMENT_SHADER, pFragmentSource);
-	if (!pixelShader) {
-		printf("frag shader not compiled\n");
-		return 0;
-	}
-
-	GLuint program = glCreateProgram();
-	if (program) {
-		glAttachShader(program, vertexShader);
-		glAttachShader(program, pixelShader);
-		glLinkProgram(program);
-		GLint linkStatus = GL_FALSE;
-		glGetProgramiv(program, GL_LINK_STATUS, &linkStatus);
-
-		if (linkStatus != GL_TRUE) {
-			GLint bufLength = 0;
-			glGetProgramiv(program, GL_INFO_LOG_LENGTH, &bufLength);
-			if (bufLength) {
-				char* buf = (char*) malloc(bufLength);
-				if (buf) {
-					glGetProgramInfoLog(program, bufLength, NULL, buf);
-					fprintf(stderr, "Could not link program:\n%s\n", buf);
-					free(buf);
-				}
-			}
-			glDeleteProgram(program);
-			program = 0;
-		}
-
-	}
-	return program;
-}
-
 struct wl_display *wldisplay = NULL;
 struct wl_compositor *wlcompositor = NULL;
 struct wl_surface *wlsurface;
@@ -301,21 +232,21 @@ struct wl_shell_surface *wlshell_surface;
 
 static void global_registry_handler(void *data, struct wl_registry *registry, uint32_t id, const char *interface, uint32_t version)
 {
-	printf("Got a registry event for %s id %d\n", interface, id);
+	printf("Got a registry event for %s id %u\n", interface, id);
 	if (strcmp(interface, "wl_compositor") == 0) {
-		wlcompositor = wl_registry_bind(registry,
+		wlcompositor = (wl_compositor *)wl_registry_bind(registry,
 						id,
 						&wl_compositor_interface,
 						1);
 	} else if (strcmp(interface, "wl_shell") == 0) {
-		wlshell = wl_registry_bind(registry, id,
+		wlshell = (wl_shell *)wl_registry_bind(registry, id,
 					&wl_shell_interface, 1);
 	}
 }
 
 static void global_registry_remover(void *data, struct wl_registry *registry, uint32_t id)
 {
-	printf("Got a registry losing event for %d\n", id);
+	printf("Got a registry losing event for %u\n", id);
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -571,4 +502,5 @@ int main(int argc, char** argv)
 	}
 
 	wl_display_disconnect(wldisplay);
+	return 0;
 }

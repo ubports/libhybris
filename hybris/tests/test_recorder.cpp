@@ -44,6 +44,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include "test_common.h"
+
 int shot_counter = 1;
 int32_t current_zoom_level = 1;
 bool new_camera_frame_available = true;
@@ -77,12 +79,12 @@ void autofocus_msg_cb(void* context)
 
 void raw_data_cb(void* data, uint32_t data_size, void* context)
 {
-	printf("%s: %d \n", __PRETTY_FUNCTION__, data_size);
+	printf("%s: %u \n", __PRETTY_FUNCTION__, data_size);
 }
 
 void jpeg_data_cb(void* data, uint32_t data_size, void* context)
 {
-	printf("%s: %d \n", __PRETTY_FUNCTION__, data_size);
+	printf("%s: %u \n", __PRETTY_FUNCTION__, data_size);
 	struct CameraControl* cc = (struct CameraControl*) context;
 	android_camera_start_preview(cc);
 }
@@ -226,8 +228,8 @@ struct ClientWithSurface client_with_surface(bool setup_surface_with_egl)
 	SfSurfaceCreationParameters params = {
 		0,
 		0,
-		sf_get_display_width(primary_display),
-		sf_get_display_height(primary_display),
+		(int)sf_get_display_width(primary_display),
+		(int)sf_get_display_height(primary_display),
 		-1, //PIXEL_FORMAT_RGBA_8888,
 		15000,
 		0.5f,
@@ -276,77 +278,6 @@ static const char* fragment_shader()
 		"{                                                   \n"
 		"  gl_FragColor = texture2D( s_texture, v_texCoord );\n"
 		"}                                                   \n";
-}
-
-static GLuint loadShader(GLenum shaderType, const char* pSource) {
-	GLuint shader = glCreateShader(shaderType);
-
-	if (shader) {
-		glShaderSource(shader, 1, &pSource, NULL);
-		glCompileShader(shader);
-		GLint compiled = 0;
-		glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
-
-		if (!compiled) {
-			GLint infoLen = 0;
-			glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLen);
-			if (infoLen) {
-				char* buf = (char*) malloc(infoLen);
-				if (buf) {
-					glGetShaderInfoLog(shader, infoLen, NULL, buf);
-					fprintf(stderr, "Could not compile shader %d:\n%s\n",
-							shaderType, buf);
-					free(buf);
-				}
-				glDeleteShader(shader);
-				shader = 0;
-			}
-		}
-	} else {
-		printf("Error, during shader creation: %i\n", glGetError());
-	}
-
-	return shader;
-}
-
-static GLuint create_program(const char* pVertexSource, const char* pFragmentSource) {
-	GLuint vertexShader = loadShader(GL_VERTEX_SHADER, pVertexSource);
-	if (!vertexShader) {
-		printf("vertex shader not compiled\n");
-		return 0;
-	}
-
-	GLuint pixelShader = loadShader(GL_FRAGMENT_SHADER, pFragmentSource);
-	if (!pixelShader) {
-		printf("frag shader not compiled\n");
-		return 0;
-	}
-
-	GLuint program = glCreateProgram();
-	if (program) {
-		glAttachShader(program, vertexShader);
-		glAttachShader(program, pixelShader);
-		glLinkProgram(program);
-		GLint linkStatus = GL_FALSE;
-
-		glGetProgramiv(program, GL_LINK_STATUS, &linkStatus);
-		if (linkStatus != GL_TRUE) {
-			GLint bufLength = 0;
-			glGetProgramiv(program, GL_INFO_LOG_LENGTH, &bufLength);
-			if (bufLength) {
-				char* buf = (char*) malloc(bufLength);
-				if (buf) {
-					glGetProgramInfoLog(program, bufLength, NULL, buf);
-					fprintf(stderr, "Could not link program:\n%s\n", buf);
-					free(buf);
-				}
-			}
-			glDeleteProgram(program);
-			program = 0;
-		}
-	}
-
-	return program;
 }
 
 int main(int argc, char** argv)

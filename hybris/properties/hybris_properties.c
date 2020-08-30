@@ -89,8 +89,7 @@ int property_set(const char *key, const char *value)
     ensure_bionic_properties_initialized();
 
     if (!own_impl)
-         return bionic_property_set(key, value);
+        return bionic_property_set(key, value);
     else
         return my_property_set(key, value);
 }
-

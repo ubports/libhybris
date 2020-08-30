@@ -259,6 +259,7 @@ static int __android_pthread_cond_pulse(android_cond_t *cond, int counter)
     fret = syscall(SYS_futex , &cond->value,
                    pshared ? FUTEX_WAKE : FUTEX_WAKE_PRIVATE, counter,
                    NULL, NULL, NULL);
+    (void)fret;
     LOGD("futex based pthread_cond_*, value %d, counter %d, ret %d",
                                             cond->value, counter, fret);
     return 0;
@@ -326,9 +327,19 @@ static void *_hybris_hook_malloc(size_t size)
 {
     TRACE_HOOK("size %zu", size);
 
+    void *res = malloc(size);
+
+    TRACE_HOOK("res %p", res);
+
+    return res;
+}
+
 #ifdef WANT_ADRENO_QUIRKS
-    if(size == 4) size = 5;
-#endif
+static void *_hybris_hook_malloc45(size_t size)
+{
+    TRACE_HOOK("size %zu", size);
+
+    if (size == 4) size = 5;
 
     void *res = malloc(size);
 
@@ -336,6 +347,7 @@ static void *_hybris_hook_malloc(size_t size)
 
     return res;
 }
+#endif
 
 static size_t _hybris_hook_malloc_usable_size (void *ptr)
 {
@@ -347,6 +359,10 @@ static size_t _hybris_hook_malloc_usable_size (void *ptr)
 static void *_hybris_hook_memcpy(void *dst, const void *src, size_t len)
 {
     TRACE_HOOK("dst %p src %p len %zu", dst, src, len);
+
+    if (src == dst) {
+        return dst;
+    }
 
     if (src == NULL || dst == NULL)
         return dst;
@@ -1388,7 +1404,7 @@ struct bionic_sbuf {
 typedef off_t bionic_fpos_t;
 
 /* "struct __sFILE" from bionic/libc/include/stdio.h */
-struct __attribute__((packed)) bionic_file {
+struct bionic_file {
     unsigned char *_p;      /* current position in (some) buffer */
     int _r;                 /* read space left for getc() */
     int _w;                 /* write space left for putc() */
@@ -1594,14 +1610,14 @@ FP_ATTRIB static int _hybris_hook_fscanf(FILE *fp, const char *fmt, ...)
 
 static int _hybris_hook_fseek(FILE *fp, long offset, int whence)
 {
-    TRACE_HOOK("fp %p offset %jd whence %d", fp, offset, whence);
+    TRACE_HOOK("fp %p offset %ld whence %d", fp, offset, whence);
 
     return fseek(_get_actual_fp(fp), offset, whence);
 }
 
 static int _hybris_hook_fseeko(FILE *fp, off_t offset, int whence)
 {
-    TRACE_HOOK("fp %p offset %jd whence %d", fp, offset, whence);
+    TRACE_HOOK("fp %p offset %ld whence %d", fp, offset, whence);
 
     return fseeko(_get_actual_fp(fp), offset, whence);
 }
@@ -1613,7 +1629,6 @@ static int _hybris_hook_fsetpos(FILE *fp, const bionic_fpos_t *pos)
     fpos_t my_fpos;
     my_fpos.__pos = *pos;
     memset(&my_fpos.__state, 0, sizeof(mbstate_t));
-    mbsinit(&my_fpos.__state);
 
     return fsetpos(_get_actual_fp(fp), &my_fpos);
 }
@@ -2075,28 +2090,28 @@ static int _hybris_hook___system_property_wait(const void *pi)
 
 static int _hybris_hook___system_property_update(void *pi, const char *value, unsigned int len)
 {
-    TRACE_HOOK("pi %p value '%s' len %d", pi, value, len);
+    TRACE_HOOK("pi %p value '%s' len %u", pi, value, len);
 
     return 0;
 }
 
 static int _hybris_hook___system_property_add(const char *name, unsigned int namelen, const char *value, unsigned int valuelen)
 {
-    TRACE_HOOK("name '%s' namelen %d value '%s' valuelen %d",
+    TRACE_HOOK("name '%s' namelen %u value '%s' valuelen %u",
                name, namelen, value, valuelen);
     return 0;
 }
 
 static unsigned int _hybris_hook___system_property_wait_any(unsigned int serial)
 {
-    TRACE_HOOK("serial %d", serial);
+    TRACE_HOOK("serial %u", serial);
 
     return 0;
 }
 
 static const void *_hybris_hook___system_property_find_nth(unsigned n)
 {
-    TRACE_HOOK("n %d", n);
+    TRACE_HOOK("n %u", n);
 
     return NULL;
 }
@@ -2384,7 +2399,7 @@ static char* _hybris_hook_setlocale(int category, const char *locale)
 static void* _hybris_hook_mmap(void *addr, size_t len, int prot,
                   int flags, int fd, off_t offset)
 {
-    TRACE_HOOK("addr %p len %zu prot %i flags %i fd %i offset %jd",
+    TRACE_HOOK("addr %p len %zu prot %i flags %i fd %i offset %ld",
                addr, len, prot, flags, fd, offset);
 
     return mmap(addr, len, prot, flags, fd, offset);
@@ -2574,7 +2589,7 @@ static void* _hybris_hook_dladdr(void *addr, Dl_info *info)
 {
     TRACE("addr %p info %p", addr, info);
 
-    return _android_dladdr(addr, info);
+    return (void *)_android_dladdr(addr, info);
 }
 
 static int _hybris_hook_dlclose(void *handle)
@@ -2607,7 +2622,7 @@ int _hybris_hook_dl_iterate_phdr(int (*cb)(void* info, size_t size, void* data),
 
 void _hybris_hook_android_get_LD_LIBRARY_PATH(char* buffer, size_t buffer_size)
 {
-    TRACE("buffer %p, buffer_size %zu\n", buffer_size);
+    TRACE("buffer %p, buffer_size %zu\n", buffer, buffer_size);
 
     _android_get_LD_LIBRARY_PATH(buffer, buffer_size);
 }
@@ -2621,16 +2636,16 @@ void _hybris_hook_android_update_LD_LIBRARY_PATH(const char* ld_library_path)
 
 void* _hybris_hook_android_dlopen_ext(const char* filename, int flag, const void* extinfo)
 {
-    TRACE("filename %s, flag %d, extinfo %s", filename, flag, extinfo);
+    TRACE("filename %s, flag %d, extinfo %p", filename, flag, extinfo);
 
     return _android_dlopen_ext(filename, flag, extinfo);
 }
 
 void _hybris_hook_android_set_application_target_sdk_version(uint32_t target)
 {
-    TRACE("target %d", target);
+    TRACE("target %u", target);
 
-    android_set_application_target_sdk_version(target);
+    _android_set_application_target_sdk_version(target);
 }
 
 uint32_t _hybris_hook_android_get_application_target_sdk_version()
@@ -2674,12 +2689,9 @@ void* _hybris_hook_android_get_exported_namespace(const char* name)
     return _android_get_exported_namespace(name);
 }
 
-/* this was added while debugging in the hopes to get a backtrace from a double
- * free crash. Unfortunately it fixes the problem so we cannot get a proper
- * backtrace to fix the underlying problem. */
 void _hybris_hook_free(void *ptr)
 {
-    if (ptr) ((char*)ptr)[0] = 0;
+    TRACE_HOOK("ptr %p", ptr);
     free(ptr);
 }
 
@@ -3203,6 +3215,12 @@ static void* __hybris_get_hooked_symbol(const char *sym, const char *requester)
         if (found)
             return (void*) found;
     }
+
+#ifdef WANT_ADRENO_QUIRKS
+    if (strstr(requester, "libllvm-glnext.so") != NULL && strcmp(sym, "malloc") == 0) {
+        return _hybris_hook_malloc45;
+    }
+#endif
 
     if (!sorted)
     {

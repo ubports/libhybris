@@ -44,50 +44,15 @@ static void *_hybris_libgles1 = NULL;
 static void *_hybris_libgles2 = NULL;
 static int _egl_context_client_version = 1;
 
-static EGLint  (*_eglGetError)(void) = NULL;
-
 static EGLDisplay  (*_eglGetDisplay)(EGLNativeDisplayType display_id) = NULL;
-static EGLBoolean  (*_eglInitialize)(EGLDisplay dpy, EGLint *major, EGLint *minor) = NULL;
 static EGLBoolean  (*_eglTerminate)(EGLDisplay dpy) = NULL;
 
 static const char *  (*_eglQueryString)(EGLDisplay dpy, EGLint name) = NULL;
 
-static EGLBoolean  (*_eglGetConfigs)(EGLDisplay dpy, EGLConfig *configs,
-		EGLint config_size, EGLint *num_config) = NULL;
-static EGLBoolean  (*_eglChooseConfig)(EGLDisplay dpy, const EGLint *attrib_list,
-		EGLConfig *configs, EGLint config_size,
-		EGLint *num_config) = NULL;
-static EGLBoolean  (*_eglGetConfigAttrib)(EGLDisplay dpy, EGLConfig config,
-		EGLint attribute, EGLint *value) = NULL;
-
 static EGLSurface  (*_eglCreateWindowSurface)(EGLDisplay dpy, EGLConfig config,
 		EGLNativeWindowType win,
 		const EGLint *attrib_list) = NULL;
-static EGLSurface  (*_eglCreatePbufferSurface)(EGLDisplay dpy, EGLConfig config,
-		const EGLint *attrib_list) = NULL;
-static EGLSurface  (*_eglCreatePixmapSurface)(EGLDisplay dpy, EGLConfig config,
-		EGLNativePixmapType pixmap,
-		const EGLint *attrib_list) = NULL;
 static EGLBoolean  (*_eglDestroySurface)(EGLDisplay dpy, EGLSurface surface) = NULL;
-static EGLBoolean  (*_eglQuerySurface)(EGLDisplay dpy, EGLSurface surface,
-		EGLint attribute, EGLint *value) = NULL;
-
-static EGLBoolean  (*_eglBindAPI)(EGLenum api) = NULL;
-static EGLenum  (*_eglQueryAPI)(void) = NULL;
-
-static EGLBoolean  (*_eglWaitClient)(void) = NULL;
-
-static EGLBoolean  (*_eglReleaseThread)(void) = NULL;
-
-static EGLSurface  (*_eglCreatePbufferFromClientBuffer)(
-		EGLDisplay dpy, EGLenum buftype, EGLClientBuffer buffer,
-		EGLConfig config, const EGLint *attrib_list) = NULL;
-
-static EGLBoolean  (*_eglSurfaceAttrib)(EGLDisplay dpy, EGLSurface surface,
-		EGLint attribute, EGLint value) = NULL;
-static EGLBoolean  (*_eglBindTexImage)(EGLDisplay dpy, EGLSurface surface, EGLint buffer) = NULL;
-static EGLBoolean  (*_eglReleaseTexImage)(EGLDisplay dpy, EGLSurface surface, EGLint buffer) = NULL;
-
 
 static EGLBoolean  (*_eglSwapInterval)(EGLDisplay dpy, EGLint interval) = NULL;
 
@@ -95,21 +60,10 @@ static EGLBoolean  (*_eglSwapInterval)(EGLDisplay dpy, EGLint interval) = NULL;
 static EGLContext  (*_eglCreateContext)(EGLDisplay dpy, EGLConfig config,
 		EGLContext share_context,
 		const EGLint *attrib_list) = NULL;
-static EGLBoolean  (*_eglDestroyContext)(EGLDisplay dpy, EGLContext ctx) = NULL;
-static EGLBoolean  (*_eglMakeCurrent)(EGLDisplay dpy, EGLSurface draw,
-		EGLSurface read, EGLContext ctx) = NULL;
 
-static EGLContext  (*_eglGetCurrentContext)(void) = NULL;
 static EGLSurface  (*_eglGetCurrentSurface)(EGLint readdraw) = NULL;
-static EGLDisplay  (*_eglGetCurrentDisplay)(void) = NULL;
-static EGLBoolean  (*_eglQueryContext)(EGLDisplay dpy, EGLContext ctx,
-		EGLint attribute, EGLint *value) = NULL;
 
-static EGLBoolean  (*_eglWaitGL)(void) = NULL;
-static EGLBoolean  (*_eglWaitNative)(EGLint engine) = NULL;
 static EGLBoolean  (*_eglSwapBuffers)(EGLDisplay dpy, EGLSurface surface) = NULL;
-static EGLBoolean  (*_eglCopyBuffers)(EGLDisplay dpy, EGLSurface surface,
-		EGLNativePixmapType target) = NULL;
 
 
 static EGLImageKHR (*_eglCreateImageKHR)(EGLDisplay dpy, EGLContext ctx, EGLenum target, EGLClientBuffer buffer, const EGLint *attrib_list) = NULL;
@@ -425,13 +379,11 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char *procname)
 			ret = _hybris_libgles1 ? dlsym(_hybris_libgles1, procname) : NULL;
 			break;
 		case 2:  // OpenGL ES 2.0 API
+		case 3:  // OpenGL ES 3.x API, backwards compatible with OpenGL ES 2.0 so we implement in same library
 			if (_hybris_libgles2 == NULL) {
 				_hybris_libgles2 = (void *) dlopen(getenv("HYBRIS_LIBGLESV2") ?: "libGLESv2.so.2", RTLD_LAZY);
 			}
 			ret = _hybris_libgles2 ? dlsym(_hybris_libgles2, procname) : NULL;
-			break;
-		case 3:  // OpenGL ES 3.x API
-			// TODO: Load from libGLESv3.so once we have OpenGL ES 3.0/3.1 support
 			break;
 		default:
 			HYBRIS_WARN("Unknown EGL context client version: %d", _egl_context_client_version);

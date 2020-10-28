@@ -2967,6 +2967,7 @@ static struct _hook hooks_common[] = {
     HOOK_INDIRECT(versionsort),
     /* fcntl.h */
     HOOK_INDIRECT(open),
+    HOOK_DIRECT_NO_DEBUG(close),
     // TODO: scandir, scandirat, alphasort, versionsort
     HOOK_INDIRECT(__get_tls_hooks),
     HOOK_DIRECT_NO_DEBUG(sscanf),

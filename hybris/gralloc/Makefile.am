@@ -15,7 +15,7 @@ libgralloc_la_CFLAGS = -DHAS_GRALLOC1_HEADER=1
 else
 libgralloc_la_CFLAGS = -DHAS_GRALLOC1_HEADER=0
 endif
-libgralloc_la_CFLAGS += -I$(top_srcdir)/include $(ANDROID_HEADERS_CFLAGS)
+libgralloc_la_CFLAGS += -I$(top_srcdir)/include -I$(top_srcdir)/common $(ANDROID_HEADERS_CFLAGS)
 libgralloc_la_CXXFLAGS = -std=gnu++11 -I$(top_srcdir)/include
 if WANT_TRACE
 libgralloc_la_CFLAGS += -DDEBUG

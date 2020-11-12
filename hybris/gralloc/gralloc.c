@@ -24,6 +24,7 @@
 #include <assert.h>
 
 #include <dlfcn.h>
+#include "logging.h"
 
 static int version = -1;
 static hw_module_t *gralloc_hardware_module = NULL;
@@ -129,8 +130,7 @@ void hybris_gralloc_initialize(int framebuffer)
             assert(NULL);
         }
     } else {
-        // shouldn't reach here.
-        assert(NULL);
+        TRACE("hybris gralloc module has been already initialized\n");
     }
 }
 

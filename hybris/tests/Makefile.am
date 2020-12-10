@@ -148,7 +148,8 @@ test_hwcomposer_CXXFLAGS = \
 	-I$(top_srcdir)/egl/platforms/common \
 	-I$(top_srcdir)/egl/platforms/hwcomposer \
 	-I$(top_srcdir)/libsync \
-	-DUSE_HWCOMPOSER=1
+	-DUSE_HWCOMPOSER=1 \
+	-std=gnu++11
 
 if WANT_MESA
 test_hwcomposer_CXXFLAGS += -DLIBHYBRIS_WANTS_MESA_X11_HEADERS
@@ -212,7 +213,8 @@ test_ui_LDADD = \
 test_sf_SOURCES = test_sf.cpp test_common.cpp
 test_sf_CXXFLAGS = \
 	-I$(top_srcdir)/include \
-	$(ANDROID_HEADERS_CFLAGS)
+	$(ANDROID_HEADERS_CFLAGS) \
+	-std=gnu++11
 test_sf_LDADD = \
 	$(top_builddir)/common/libhybris-common.la \
 	$(top_builddir)/egl/libEGL.la \
@@ -267,7 +269,8 @@ test_media_SOURCES = test_media.cpp test_common.cpp
 test_media_CFLAGS = \
 	-I$(top_srcdir)/include
 test_media_CXXFLAGS = \
-	$(test_media_CFLAGS)
+	$(test_media_CFLAGS) \
+	-std=gnu++11
 if HAS_HWCOMPOSER2_HEADERS
 test_media_CXXFLAGS += \
 	-DHAS_HWCOMPOSER2_HEADERS=1
@@ -286,7 +289,8 @@ test_recorder_SOURCES = test_recorder.cpp test_common.cpp
 test_recorder_CFLAGS = \
 	-I$(top_srcdir)/include
 test_recorder_CXXFLAGS = \
-	$(test_recorder_CFLAGS)
+	$(test_recorder_CFLAGS) \
+	-std=gnu++11
 if HAS_HWCOMPOSER2_HEADERS
 test_recorder_CXXFLAGS += \
 	-DHAS_HWCOMPOSER2_HEADERS=1
